@@ -33,7 +33,6 @@ py --version
 Open Terminal and run:
 
 ```bash
-cd "/Users/khatran/Desktop/Team-M1-Site/flood-map"
 python3 -m http.server 4173 --directory dist
 ```
 

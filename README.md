@@ -89,6 +89,8 @@ Team-M1-Site/
 - Search for addresses, buildings and landmarks throughout Melbourne CBD.
 - Click any CBD location on the map to open a pre-filled observation form.
 - Search and choose from the main Melbourne CBD streets and intersections inside the report form.
+- Filter visible reports by today, the past 7 or 30 days, 6 months, or 1 year.
+- See low-impact pins in yellow, moderate-impact pins in orange, and high-impact pins in red.
 - Sample flood hotspots and numbered incident markers.
 - Recent reports and past hotspots views.
 - Time-period selector.

@@ -67,9 +67,11 @@
           <label class="period-control">
             <span class="sr-only">Choose time period</span>
             <select id="period-select">
-              <option value="12">Past 12 months</option>
-              <option value="6">Past 6 months</option>
-              <option value="3">Past 3 months</option>
+              <option value="today">Submitted today</option>
+              <option value="7d">Past 7 days</option>
+              <option value="30d">Past 30 days</option>
+              <option value="6m">Past 6 months</option>
+              <option value="1y" selected>Past 1 year</option>
             </select>
           </label>
         </div>
@@ -85,12 +87,17 @@
           <strong>Reported incident density</strong>
           <div class="legend-gradient" aria-hidden="true"></div>
           <div class="legend-labels"><span>Fewer</span><span>More</span></div>
+          <div class="severity-key" aria-label="Report impact colours">
+            <span><i class="severity-dot severity-low"></i>Low</span>
+            <span><i class="severity-dot severity-moderate"></i>Moderate</span>
+            <span><i class="severity-dot severity-high"></i>High</span>
+          </div>
           <small>No reports does not mean no risk.</small>
         </div>
 
         <div class="map-summary" aria-live="polite">
           <span class="status-dot"></span>
-          <span id="map-summary-text">3 sample hotspots shown · Past 12 months</span>
+          <span id="map-summary-text">3 reports shown · Past 1 year</span>
         </div>
       </section>
 
@@ -107,7 +114,7 @@
             <div>
               <p class="report-kicker" id="report-severity">Moderate impact</p>
               <h2 id="report-title">Water pooling</h2>
-              <p class="metadata" id="report-meta">Historical report · 14 Feb 2024, 5:20 pm</p>
+          <p class="metadata" id="report-meta">Historical report · Recent sample</p>
             </div>
           </div>
 

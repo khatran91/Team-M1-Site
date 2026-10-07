@@ -1,3 +1,17 @@
+function daysAgo(days) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+}
+
+function formatReportDate(value) {
+  return new Intl.DateTimeFormat("en-AU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 const reports = [
   {
     id: 1,
@@ -6,7 +20,8 @@ const reports = [
     location: "Elizabeth Street near Queen Victoria Market",
     lat: -37.8087,
     lng: 144.9607,
-    date: "8 Nov 2024, 8:10 am",
+    createdAt: daysAgo(5),
+    date: formatReportDate(daysAgo(5)),
     rainfall: "22 mm",
     notes: "Leaves blocked the corner drain and water spread into the bicycle lane.",
     duration: "20–30 min",
@@ -21,7 +36,8 @@ const reports = [
     location: "Elizabeth Street, Melbourne",
     lat: -37.8139,
     lng: 144.9622,
-    date: "14 Feb 2024, 5:20 pm",
+    createdAt: daysAgo(20),
+    date: formatReportDate(daysAgo(20)),
     rainfall: "38 mm",
     notes: "Water pooled along the kerb after heavy rain. The drain cleared slowly.",
     duration: "45–60 min",
@@ -36,7 +52,8 @@ const reports = [
     location: "Flinders Lane near Swanston Street",
     lat: -37.8172,
     lng: 144.9653,
-    date: "23 Dec 2023, 6:45 pm",
+    createdAt: daysAgo(240),
+    date: formatReportDate(daysAgo(240)),
     rainfall: "44 mm",
     notes: "One traffic lane was covered and vehicles slowed to pass the intersection.",
     duration: "60–90 min",
@@ -157,10 +174,17 @@ const markerLayer = L.layerGroup().addTo(map);
 const heatLayer = L.layerGroup().addTo(map);
 let selectedLocationMarker = null;
 
-const markerIcon = (number) =>
+function severityClass(severity) {
+  const value = String(severity || "").toLowerCase();
+  if (value.includes("high")) return "high";
+  if (value.includes("low")) return "low";
+  return "moderate";
+}
+
+const markerIcon = (number, severity) =>
   L.divIcon({
     className: "incident-marker",
-    html: `<div class="incident-pin"><span>${number}</span></div>`,
+    html: `<div class="incident-pin severity-${severityClass(severity)}"><span>${number}</span></div>`,
     iconSize: [42, 48],
     iconAnchor: [21, 45],
   });
@@ -193,28 +217,30 @@ function setSelectedLocation(lat, lng) {
   }
 }
 
-function drawHotspots(visible = true) {
+function drawHotspots(visible = true, visibleReports = reports) {
   heatLayer.clearLayers();
   if (!visible) return;
 
-  const rings = [
-    [-37.8087, 144.9607, 180],
-    [-37.8139, 144.9622, 245],
-    [-37.8172, 144.9653, 165],
-  ];
+  const rings = visibleReports.map((report) => ({
+    lat: report.lat,
+    lng: report.lng,
+    radius: severityClass(report.severity) === "high" ? 245 : severityClass(report.severity) === "low" ? 155 : 205,
+    severity: severityClass(report.severity),
+  }));
 
-  rings.forEach(([lat, lng, radius], index) => {
+  rings.forEach(({ lat, lng, radius, severity }) => {
+    const fillColor = severity === "high" ? "#ef554c" : severity === "low" ? "#f3c84b" : "#f28b32";
     L.circle([lat, lng], {
       radius,
       stroke: false,
-      fillColor: index === 1 ? "#ef554c" : "#f8ad43",
-      fillOpacity: index === 1 ? 0.22 : 0.18,
+      fillColor,
+      fillOpacity: severity === "high" ? 0.22 : 0.18,
       interactive: false,
     }).addTo(heatLayer);
     L.circle([lat, lng], {
       radius: radius * 0.58,
       stroke: false,
-      fillColor: index === 1 ? "#ef554c" : "#ffca61",
+      fillColor,
       fillOpacity: 0.24,
       interactive: false,
     }).addTo(heatLayer);
@@ -223,7 +249,7 @@ function drawHotspots(visible = true) {
 
 function addMarker(report) {
   const marker = L.marker([report.lat, report.lng], {
-    icon: markerIcon(report.id),
+    icon: markerIcon(report.id, report.severity),
     keyboard: true,
     title: `${report.id}. ${report.title}`,
   }).addTo(markerLayer);
@@ -246,6 +272,7 @@ const ui = {
   duration: document.querySelector("#report-duration"),
   depth: document.querySelector("#report-depth"),
   summary: document.querySelector("#map-summary-text"),
+  periodSelect: document.querySelector("#period-select"),
   legend: document.querySelector("#legend"),
   evidence: document.querySelector("#evidence-details"),
   evidenceButton: document.querySelector("#evidence-button"),
@@ -280,6 +307,7 @@ const ui = {
 
 let selectedReportId = 2;
 let currentView = "hotspots";
+let currentPeriod = ui.periodSelect.value || "1y";
 let toastTimer;
 let pendingPhotoUrl = null;
 let locationRequestId = 0;
@@ -296,6 +324,8 @@ function selectReport(id, pan = false) {
   ui.areaTitle.textContent = "Around this location";
   ui.areaName.textContent = report.location;
   ui.reportNumber.querySelector("span").textContent = report.id;
+  ui.reportNumber.classList.remove("severity-low", "severity-moderate", "severity-high");
+  ui.reportNumber.classList.add(`severity-${severityClass(report.severity)}`);
   ui.severity.textContent = report.severity;
   ui.title.textContent = report.title;
   ui.meta.textContent = `${report.isNew ? "Community report" : "Historical report"} · ${report.date}`;
@@ -329,6 +359,82 @@ function showToast(message) {
   ui.toast.textContent = message;
   ui.toast.classList.add("show");
   toastTimer = window.setTimeout(() => ui.toast.classList.remove("show"), 2800);
+}
+
+const periodLabels = {
+  today: "Submitted today",
+  "7d": "Past 7 days",
+  "30d": "Past 30 days",
+  "6m": "Past 6 months",
+  "1y": "Past 1 year",
+};
+
+function periodStart(period) {
+  const start = new Date();
+  if (period === "today") {
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+  if (period === "7d") {
+    start.setDate(start.getDate() - 7);
+    return start;
+  }
+  if (period === "30d") {
+    start.setDate(start.getDate() - 30);
+    return start;
+  }
+  if (period === "6m") {
+    start.setMonth(start.getMonth() - 6);
+    return start;
+  }
+  start.setFullYear(start.getFullYear() - 1);
+  return start;
+}
+
+function reportsForCurrentPeriod() {
+  const start = periodStart(currentPeriod);
+  const end = new Date();
+  return reports.filter((report) => {
+    const createdAt = new Date(report.createdAt || report.date);
+    return createdAt >= start && createdAt <= end;
+  });
+}
+
+function showNoReportsState() {
+  ui.areaTitle.textContent = "No reports in this period";
+  ui.areaName.textContent = periodLabels[currentPeriod];
+  ui.reportNumber.querySelector("span").textContent = "—";
+  ui.reportNumber.classList.remove("severity-low", "severity-moderate", "severity-high");
+  ui.reportNumber.classList.add("severity-moderate");
+  ui.severity.textContent = "No matching observations";
+  ui.title.textContent = "Try another time range";
+  ui.meta.textContent = "Choose a wider period to see reports.";
+  ui.rainfall.textContent = "—";
+  ui.copy.textContent = "No community observations fall inside this selected period yet.";
+  ui.duration.textContent = "—";
+  ui.depth.textContent = "—";
+  ui.evidence.hidden = true;
+  ui.evidenceVisual.hidden = true;
+  ui.reportPhoto.hidden = true;
+  ui.evidenceTagText.textContent = "No reports in period";
+}
+
+function applyPeriodFilter() {
+  const visibleReports = reportsForCurrentPeriod();
+  markerLayer.clearLayers();
+  visibleReports.forEach(addMarker);
+  drawHotspots(currentView === "hotspots", visibleReports);
+
+  if (visibleReports.some((report) => report.id === selectedReportId)) {
+    selectReport(selectedReportId, false);
+  } else if (visibleReports[0]) {
+    selectReport(visibleReports[0].id, false);
+  } else {
+    showNoReportsState();
+  }
+
+  const noun = currentView === "hotspots" ? "hotspots" : "reports";
+  ui.summary.textContent = `${visibleReports.length} ${noun} shown · ${periodLabels[currentPeriod]}`;
 }
 
 function requestNominatim(url) {
@@ -716,14 +822,12 @@ function createReport({ type, location, notes, lat, lng, photoUrl = null }) {
   const report = {
     id: reports.length + 1,
     title: type,
-    severity: "New observation",
+    severity: "Moderate impact",
     location,
     lat: reportLat,
     lng: reportLng,
-    date: new Intl.DateTimeFormat("en-AU", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date()),
+    createdAt: new Date().toISOString(),
+    date: formatReportDate(new Date()),
     rainfall: "Pending",
     notes,
     duration: "Not provided",
@@ -733,9 +837,8 @@ function createReport({ type, location, notes, lat, lng, photoUrl = null }) {
   };
 
   reports.push(report);
-  addMarker(report);
+  applyPeriodFilter();
   selectReport(report.id, true);
-  ui.summary.textContent = `${reports.length} community reports shown`;
   return report;
 }
 
@@ -771,18 +874,14 @@ document.querySelectorAll("[data-view]").forEach((tab) => {
       item.classList.toggle("active", active);
       item.setAttribute("aria-selected", String(active));
     });
-    drawHotspots(currentView === "hotspots");
     ui.legend.hidden = currentView !== "hotspots";
-    ui.summary.textContent = currentView === "hotspots"
-      ? `${reports.length} community hotspots shown · ${document.querySelector("#period-select").selectedOptions[0].textContent}`
-      : `${reports.length} recent community reports shown`;
+    applyPeriodFilter();
   });
 });
 
-document.querySelector("#period-select").addEventListener("change", (event) => {
-  if (currentView === "hotspots") {
-    ui.summary.textContent = `${reports.length} community hotspots shown · ${event.target.selectedOptions[0].textContent}`;
-  }
+ui.periodSelect.addEventListener("change", (event) => {
+  currentPeriod = event.target.value;
+  applyPeriodFilter();
 });
 
 ui.evidenceButton.addEventListener("click", () => {
@@ -796,6 +895,7 @@ document.querySelector("#update-button").addEventListener("click", () => {
 });
 
 selectReport(2, false);
+applyPeriodFilter();
 
 function registerWebMcpTools() {
   const context = document.modelContext;
@@ -816,7 +916,7 @@ function registerWebMcpTools() {
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute() {
-      return reports.map(({ id, title, location, date, severity }) => ({
+      return reportsForCurrentPeriod().map(({ id, title, location, date, severity }) => ({
         id,
         title,
         location,
@@ -838,7 +938,8 @@ function registerWebMcpTools() {
     },
     annotations: { readOnlyHint: true, untrustedContentHint: false },
     execute(input) {
-      if (!Number.isInteger(input?.reportId) || !selectReport(input.reportId, true)) {
+      const visibleIds = new Set(reportsForCurrentPeriod().map((report) => report.id));
+      if (!Number.isInteger(input?.reportId) || !visibleIds.has(input.reportId) || !selectReport(input.reportId, true)) {
         throw new Error("A visible report with that ID was not found.");
       }
       const report = reports.find((item) => item.id === input.reportId);

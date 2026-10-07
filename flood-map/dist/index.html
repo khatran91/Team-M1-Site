@@ -67,7 +67,7 @@
           <label class="period-control">
             <span class="sr-only">Choose time period</span>
             <select id="period-select">
-              <option value="today">Submitted today</option>
+              <option value="today"> Today</option>
               <option value="7d">Past 7 days</option>
               <option value="30d">Past 30 days</option>
               <option value="6m">Past 6 months</option>
@@ -207,6 +207,14 @@
             <option value="Debris blocking water flow">Debris blocking water flow</option>
             <option value="Traffic disruption">Traffic disruption</option>
             <option value="Other flood impact">Other flood impact</option>
+          </select>
+        </label>
+        <label>
+          Severity
+          <select id="observation-severity" required>
+            <option value="Moderate impact" selected>Moderate — orange pin</option>
+            <option value="Low impact">Low — yellow pin</option>
+            <option value="High impact">High — red pin</option>
           </select>
         </label>
         <div class="location-picker">

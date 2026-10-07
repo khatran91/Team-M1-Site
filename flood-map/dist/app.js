@@ -91,6 +91,7 @@ const observationTypes = [
   "Traffic disruption",
   "Other flood impact",
 ];
+const observationSeverities = ["Low impact", "Moderate impact", "High impact"];
 
 const eastWestCbdStreets = [
   "Victoria Street",
@@ -289,6 +290,7 @@ const ui = {
   dialog: document.querySelector("#report-dialog"),
   form: document.querySelector("#observation-form"),
   observationType: document.querySelector("#observation-type"),
+  observationSeverity: document.querySelector("#observation-severity"),
   observationLocation: document.querySelector("#observation-location"),
   observationLocationChoice: document.querySelector("#observation-location-choice"),
   reportLocationSearch: document.querySelector("#report-location-search"),
@@ -362,7 +364,7 @@ function showToast(message) {
 }
 
 const periodLabels = {
-  today: "Submitted today",
+  today: "Today",
   "7d": "Past 7 days",
   "30d": "Past 30 days",
   "6m": "Past 6 months",
@@ -780,6 +782,7 @@ function openObservationDialogAt(lat, lng, initialLabel) {
   ui.reportLocationSearch.value = "";
   renderReportLocationChoices("", "map-pin");
   ui.observationType.value = "";
+  ui.observationSeverity.value = "Moderate impact";
   ui.observationNotes.value = "";
   clearPendingPhoto();
   ui.dialog.showModal();
@@ -815,14 +818,14 @@ ui.dialog.addEventListener("close", () => {
   if (pendingPhotoUrl) clearPendingPhoto();
 });
 
-function createReport({ type, location, notes, lat, lng, photoUrl = null }) {
+function createReport({ type, severity = "Moderate impact", location, notes, lat, lng, photoUrl = null }) {
   const center = map.getCenter();
   const reportLat = Number.isFinite(Number(lat)) ? Number(lat) : center.lat;
   const reportLng = Number.isFinite(Number(lng)) ? Number(lng) : center.lng;
   const report = {
     id: reports.length + 1,
     title: type,
-    severity: "Moderate impact",
+    severity: observationSeverities.includes(severity) ? severity : "Moderate impact",
     location,
     lat: reportLat,
     lng: reportLng,
@@ -852,6 +855,7 @@ ui.form.addEventListener("submit", (event) => {
   pendingPhotoUrl = null;
   const report = createReport({
     type: ui.observationType.value,
+    severity: ui.observationSeverity.value,
     location: ui.observationLocation.value.trim(),
     notes: ui.observationNotes.value.trim(),
     lat: Number(ui.observationLat.value),
@@ -955,6 +959,7 @@ function registerWebMcpTools() {
       type: "object",
       properties: {
         type: { type: "string", enum: observationTypes },
+        severity: { type: "string", enum: observationSeverities },
         location: { type: "string", minLength: 3, maxLength: 160 },
         notes: { type: "string", minLength: 5, maxLength: 500 },
         latitude: { type: "number", minimum: melbourneCbd.south, maximum: melbourneCbd.north },
@@ -985,6 +990,7 @@ function registerWebMcpTools() {
 
       const report = createReport({
         type: input.type,
+        severity: input.severity,
         location: input.location.trim(),
         notes: input.notes.trim(),
         lat: input.latitude,

@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A community flood observations map for Melbourne CBD."
+    />
+    <title>Melbourne Community Flood Map</title>
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b355d'/%3E%3Cpath d='M4 12c4 0 4-4 8-4s4 4 8 4 4-4 8-4M4 20c4 0 4-4 8-4s4 4 8 4 4-4 8-4' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://unpkg.com" />
+    <link rel="preconnect" href="https://tile.openstreetmap.org" />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIINfQ3ynhHd7i2qEg8dJpZ24i4fi/3qpsA="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#map" aria-label="Melbourne Community Flood Map home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 54 38" role="img">
+            <path d="M4 12c7 0 7-7 14-7s7 7 14 7 7-7 14-7" />
+            <path d="M4 27c7 0 7-7 14-7s7 7 14 7 7-7 14-7" />
+          </svg>
+        </span>
+        <span>Melbourne Community Flood Map</span>
+      </a>
+      <span class="concept-chip">Concept map · Sample data</span>
+      <form class="search" id="search-form" role="search">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="6.8"></circle>
+          <path d="m16 16 5 5"></path>
+        </svg>
+        <label class="sr-only" for="location-search">Find a street or landmark</label>
+        <input
+          id="location-search"
+          type="search"
+          autocomplete="off"
+          placeholder="Find a street or landmark…"
+        />
+        <button type="submit">Find</button>
+        <div class="search-results" id="search-results" role="listbox" hidden></div>
+      </form>
+    </header>
+
+    <main class="workspace">
+      <section class="map-shell" aria-label="Flood observations map">
+        <div class="map-toolbar">
+          <div class="tabs" role="tablist" aria-label="Map display">
+            <button id="recent-tab" role="tab" aria-selected="false" data-view="recent">
+              Recent reports
+            </button>
+            <button id="hotspots-tab" class="active" role="tab" aria-selected="true" data-view="hotspots">
+              Past hotspots
+            </button>
+          </div>
+          <label class="period-control">
+            <span class="sr-only">Choose time period</span>
+            <select id="period-select">
+              <option value="12">Past 12 months</option>
+              <option value="6">Past 6 months</option>
+              <option value="3">Past 3 months</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="map" aria-label="Interactive map of flood observations in Melbourne CBD"></div>
+
+        <div class="legend" id="legend">
+          <strong>Reported incident density</strong>
+          <div class="legend-gradient" aria-hidden="true"></div>
+          <div class="legend-labels"><span>Fewer</span><span>More</span></div>
+          <small>No reports does not mean no risk.</small>
+        </div>
+
+        <div class="map-summary" aria-live="polite">
+          <span class="status-dot"></span>
+          <span id="map-summary-text">3 sample hotspots shown · Past 12 months</span>
+        </div>
+      </section>
+
+      <aside class="details-panel" aria-labelledby="area-title">
+        <div class="area-heading">
+          <p class="eyebrow">Selected area</p>
+          <h1 id="area-title">Around your building</h1>
+          <p id="area-name">Elizabeth Street, Melbourne</p>
+        </div>
+
+        <article class="report-card" id="report-card" aria-live="polite">
+          <div class="report-heading">
+            <div class="pin-badge" id="report-number"><span>2</span></div>
+            <div>
+              <p class="report-kicker" id="report-severity">Moderate impact</p>
+              <h2 id="report-title">Water pooling</h2>
+              <p class="metadata" id="report-meta">Historical report · 14 Feb 2024, 5:20 pm</p>
+            </div>
+          </div>
+
+          <div class="evidence-visual" aria-label="Rainfall evidence summary">
+            <div class="rain-lines" aria-hidden="true"></div>
+            <div>
+              <strong id="rainfall-value">38 mm</strong>
+              <span>rainfall that day</span>
+            </div>
+            <svg viewBox="0 0 86 54" aria-hidden="true">
+              <path d="M4 45h78" />
+              <path d="M7 42c11-7 16-1 25-12 8-9 13 0 23-10 8-8 15-5 24-15" />
+              <circle cx="79" cy="5" r="3.5" />
+            </svg>
+          </div>
+
+          <div class="evidence-tag">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><circle cx="9" cy="10" r="2"></circle><path d="m6 17 4-4 3 3 2-2 3 3"></path></svg>
+            Community reported
+          </div>
+          <p class="report-copy" id="report-copy">
+            Water pooled along the kerb after heavy rain. The drain cleared slowly.
+          </p>
+          <div class="card-actions">
+            <button class="secondary-button" id="evidence-button">View details</button>
+            <button class="secondary-button update-button" id="update-button">Add an update</button>
+          </div>
+          <div class="evidence-details" id="evidence-details" hidden>
+            <dl>
+              <div><dt>Duration</dt><dd id="report-duration">45–60 min</dd></div>
+              <div><dt>Depth</dt><dd id="report-depth">Kerb height</dd></div>
+              <div><dt>Verified</dt><dd>Community report</dd></div>
+            </dl>
+          </div>
+        </article>
+
+        <button class="primary-button" id="report-button">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+          Report an observation
+        </button>
+
+        <section class="safety-note" aria-labelledby="safety-title">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3.5 6.5v5.8c0 4.6 3.6 7.5 8.5 8.7 4.9-1.2 8.5-4.1 8.5-8.7V6.5z"></path><path d="M8.5 12.2 11 15l4.8-6"></path></svg>
+          <div>
+            <h2 id="safety-title">Community information only</h2>
+            <p>For emergencies, call 000. Never enter floodwater.</p>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <footer>
+      <p>Community observations — not a flood forecast.</p>
+      <p class="footer-mark">Stronger neighbours. Safer streets.</p>
+    </footer>
+
+    <dialog id="report-dialog">
+      <form method="dialog" id="observation-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Community observation</p>
+            <h2>Report what you can see</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="Close report form">×</button>
+        </div>
+
+        <label>
+          Observation type
+          <select id="observation-type" required>
+            <option value="Water pooling">Water pooling</option>
+            <option value="Blocked drain">Blocked drain</option>
+            <option value="Road flooding">Road flooding</option>
+          </select>
+        </label>
+        <label>
+          Location
+          <input id="observation-location" value="Elizabeth Street, Melbourne" required />
+        </label>
+        <label>
+          What did you notice?
+          <textarea id="observation-notes" rows="4" placeholder="For example: water reached the kerb and was slow to drain." required></textarea>
+        </label>
+        <p class="form-help">Your report will be added to this sample map on this device.</p>
+        <div class="dialog-actions">
+          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="primary-button compact" value="default" id="submit-report">Add to map</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

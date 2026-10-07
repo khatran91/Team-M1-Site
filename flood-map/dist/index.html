@@ -40,15 +40,16 @@
           <circle cx="11" cy="11" r="6.8"></circle>
           <path d="m16 16 5 5"></path>
         </svg>
-        <label class="sr-only" for="location-search">Find a street or landmark</label>
+        <label class="sr-only" for="location-search">Find any Melbourne CBD address or landmark</label>
         <input
           id="location-search"
           type="search"
           autocomplete="off"
-          placeholder="Find a street or landmark…"
+          placeholder="Search any Melbourne CBD location…"
         />
         <button type="submit">Find</button>
         <div class="search-results" id="search-results" role="listbox" hidden></div>
+        <div class="sr-only" id="search-status" aria-live="polite"></div>
       </form>
     </header>
 
@@ -74,6 +75,11 @@
         </div>
 
         <div id="map" aria-label="Interactive map of flood observations in Melbourne CBD"></div>
+
+        <div class="map-instruction">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.3 6-11a6 6 0 1 0-12 0c0 5.7 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg>
+          Click anywhere on the map to report an observation
+        </div>
 
         <div class="legend" id="legend">
           <strong>Reported incident density</strong>
@@ -105,7 +111,7 @@
             </div>
           </div>
 
-          <div class="evidence-visual" aria-label="Rainfall evidence summary">
+          <div class="evidence-visual" id="evidence-visual" aria-label="Rainfall evidence summary">
             <div class="rain-lines" aria-hidden="true"></div>
             <div>
               <strong id="rainfall-value">38 mm</strong>
@@ -118,9 +124,14 @@
             </svg>
           </div>
 
+          <figure class="report-photo" id="report-photo" hidden>
+            <img id="report-photo-image" alt="Photo attached to this community report" />
+            <figcaption>Photo attached to this report</figcaption>
+          </figure>
+
           <div class="evidence-tag">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4z"></path><circle cx="9" cy="10" r="2"></circle><path d="m6 17 4-4 3 3 2-2 3 3"></path></svg>
-            Community reported
+            <span id="evidence-tag-text">Community reported</span>
           </div>
           <p class="report-copy" id="report-copy">
             Water pooled along the kerb after heavy rain. The drain cleared slowly.
@@ -178,13 +189,25 @@
         </label>
         <label>
           Location
-          <input id="observation-location" value="Elizabeth Street, Melbourne" required />
+          <input id="observation-location" value="Melbourne CBD" required />
         </label>
+        <input id="observation-lat" type="hidden" />
+        <input id="observation-lng" type="hidden" />
         <label>
           What did you notice?
           <textarea id="observation-notes" rows="4" placeholder="For example: water reached the kerb and was slow to drain." required></textarea>
         </label>
-        <p class="form-help">Your report will be added to this sample map on this device.</p>
+        <div class="photo-field">
+          <label for="observation-photo">Photo evidence <span>(optional)</span></label>
+          <input id="observation-photo" type="file" accept="image/jpeg,image/png,image/webp" />
+          <p class="form-help">JPG, PNG or WebP, up to 5 MB.</p>
+          <p class="field-error" id="photo-error" role="alert" hidden></p>
+          <div class="photo-preview" id="photo-preview" hidden>
+            <img id="photo-preview-image" alt="Selected report photo preview" />
+            <button type="button" class="remove-photo" id="remove-photo">Remove photo</button>
+          </div>
+        </div>
+        <p class="form-help">Reports and photos stay on this device until the page is refreshed.</p>
         <div class="dialog-actions">
           <button class="secondary-button" value="cancel">Cancel</button>
           <button class="primary-button compact" value="default" id="submit-report">Add to map</button>

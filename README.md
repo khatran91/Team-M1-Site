@@ -10,7 +10,7 @@ You only need:
 
 - **Python 3** to run a local web server.
 - A modern browser such as Chrome, Edge, Firefox, or Safari.
-- An internet connection while using the map. Leaflet is loaded from a CDN and the map tiles come from OpenStreetMap.
+- An internet connection while using the map. Leaflet is loaded from a CDN, map tiles come from OpenStreetMap, and Melbourne CBD location search uses Nominatim.
 
 You do **not** need Node.js, npm, a database, or an API key.
 
@@ -86,19 +86,20 @@ Team-M1-Site/
 ## Current functionality
 
 - Interactive Melbourne CBD map powered by Leaflet and OpenStreetMap.
+- Search for addresses, buildings and landmarks throughout Melbourne CBD.
+- Click any CBD location on the map to open a pre-filled observation form.
 - Sample flood hotspots and numbered incident markers.
 - Recent reports and past hotspots views.
 - Time-period selector.
-- Search for included sample streets and landmarks.
 - Incident detail panel.
-- Sample observation form.
+- Observation form with an optional JPG, PNG or WebP photo attachment.
 - Responsive layout for desktop and mobile screens.
 
 ## Important prototype limitations
 
 - All flood reports are sample data stored in `flood-map/dist/app.js`.
-- New observations are temporary and disappear when the page is refreshed.
-- Search currently recognises only the sample locations defined in `flood-map/dist/app.js`.
+- New observations and attached photos are temporary and disappear when the page is refreshed.
+- Location search and address lookup depend on the public OpenStreetMap Nominatim service.
 - The map should not be used for emergency decisions or as an official flood warning.
 
 ## Editing the site
@@ -114,7 +115,7 @@ If a change does not appear, perform a hard refresh:
 
 ### The map is blank
 
-Check your internet connection. The page needs access to `unpkg.com` and `tile.openstreetmap.org`.
+Check your internet connection. The page needs access to `unpkg.com`, `tile.openstreetmap.org`, and `nominatim.openstreetmap.org`.
 
 ### The terminal says the port is already in use
 

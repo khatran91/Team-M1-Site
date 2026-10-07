@@ -11,6 +11,8 @@ const reports = [
     notes: "Leaves blocked the corner drain and water spread into the bicycle lane.",
     duration: "20–30 min",
     depth: "Below kerb",
+    isNew: false,
+    photoUrl: null,
   },
   {
     id: 2,
@@ -24,6 +26,8 @@ const reports = [
     notes: "Water pooled along the kerb after heavy rain. The drain cleared slowly.",
     duration: "45–60 min",
     depth: "Kerb height",
+    isNew: false,
+    photoUrl: null,
   },
   {
     id: 3,
@@ -37,30 +41,53 @@ const reports = [
     notes: "One traffic lane was covered and vehicles slowed to pass the intersection.",
     duration: "60–90 min",
     depth: "Above kerb",
+    isNew: false,
+    photoUrl: null,
   },
 ];
 
-const searchPlaces = [
-  { label: "Elizabeth Street, Melbourne", lat: -37.8139, lng: 144.9622, reportId: 2 },
-  { label: "Queen Victoria Market", lat: -37.8076, lng: 144.9568, reportId: 1 },
-  { label: "Flinders Street Station", lat: -37.8183, lng: 144.9671, reportId: 3 },
-  { label: "Swanston Street, Melbourne", lat: -37.8147, lng: 144.966, reportId: 3 },
-  { label: "Bourke Street, Melbourne", lat: -37.8134, lng: 144.9635, reportId: 2 },
+const melbourneCbd = {
+  west: 144.947,
+  south: -37.825,
+  east: 144.977,
+  north: -37.799,
+};
+
+const melbourneCbdBounds = [
+  [melbourneCbd.south, melbourneCbd.west],
+  [melbourneCbd.north, melbourneCbd.east],
 ];
+
+const maxPhotoBytes = 5 * 1024 * 1024;
+const allowedPhotoTypes = ["image/jpeg", "image/png", "image/webp"];
 
 const map = L.map("map", {
   zoomControl: true,
   minZoom: 13,
   maxZoom: 19,
-}).setView([-37.8138, 144.9634], 15);
+  maxBounds: melbourneCbdBounds,
+  maxBoundsViscosity: 0.8,
+});
+
+map.fitBounds(melbourneCbdBounds, { padding: [24, 24] });
 
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19,
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }).addTo(map);
 
+L.rectangle(melbourneCbdBounds, {
+  color: "#05879c",
+  weight: 2,
+  opacity: 0.62,
+  dashArray: "7 7",
+  fill: false,
+  interactive: false,
+}).addTo(map);
+
 const markerLayer = L.layerGroup().addTo(map);
 const heatLayer = L.layerGroup().addTo(map);
+let selectedLocationMarker = null;
 
 const markerIcon = (number) =>
   L.divIcon({
@@ -70,9 +97,38 @@ const markerIcon = (number) =>
     iconAnchor: [21, 45],
   });
 
+const mapPickIcon = L.divIcon({
+  className: "map-pick-marker",
+  html: "<span>+</span>",
+  iconSize: [30, 30],
+  iconAnchor: [15, 15],
+});
+
+function isInsideMelbourneCbd(lat, lng) {
+  return (
+    lat >= melbourneCbd.south &&
+    lat <= melbourneCbd.north &&
+    lng >= melbourneCbd.west &&
+    lng <= melbourneCbd.east
+  );
+}
+
+function setSelectedLocation(lat, lng) {
+  if (!selectedLocationMarker) {
+    selectedLocationMarker = L.marker([lat, lng], {
+      icon: mapPickIcon,
+      keyboard: false,
+      interactive: false,
+    }).addTo(map);
+  } else {
+    selectedLocationMarker.setLatLng([lat, lng]);
+  }
+}
+
 function drawHotspots(visible = true) {
   heatLayer.clearLayers();
   if (!visible) return;
+
   const rings = [
     [-37.8087, 144.9607, 180],
     [-37.8139, 144.9622, 245],
@@ -111,6 +167,7 @@ reports.forEach(addMarker);
 drawHotspots(true);
 
 const ui = {
+  areaTitle: document.querySelector("#area-title"),
   areaName: document.querySelector("#area-name"),
   reportNumber: document.querySelector("#report-number"),
   severity: document.querySelector("#report-severity"),
@@ -124,28 +181,69 @@ const ui = {
   legend: document.querySelector("#legend"),
   evidence: document.querySelector("#evidence-details"),
   evidenceButton: document.querySelector("#evidence-button"),
+  evidenceVisual: document.querySelector("#evidence-visual"),
+  evidenceTagText: document.querySelector("#evidence-tag-text"),
+  reportPhoto: document.querySelector("#report-photo"),
+  reportPhotoImage: document.querySelector("#report-photo-image"),
   toast: document.querySelector("#toast"),
+  searchForm: document.querySelector("#search-form"),
+  searchInput: document.querySelector("#location-search"),
+  searchResults: document.querySelector("#search-results"),
+  searchStatus: document.querySelector("#search-status"),
+  searchButton: document.querySelector("#search-form button[type='submit']"),
+  dialog: document.querySelector("#report-dialog"),
+  form: document.querySelector("#observation-form"),
+  observationType: document.querySelector("#observation-type"),
+  observationLocation: document.querySelector("#observation-location"),
+  observationLat: document.querySelector("#observation-lat"),
+  observationLng: document.querySelector("#observation-lng"),
+  observationNotes: document.querySelector("#observation-notes"),
+  photoInput: document.querySelector("#observation-photo"),
+  photoError: document.querySelector("#photo-error"),
+  photoPreview: document.querySelector("#photo-preview"),
+  photoPreviewImage: document.querySelector("#photo-preview-image"),
 };
 
 let selectedReportId = 2;
 let currentView = "hotspots";
 let toastTimer;
+let pendingPhotoUrl = null;
+let locationRequestId = 0;
+let lastNominatimRequestAt = 0;
+let nominatimQueue = Promise.resolve();
 
 function selectReport(id, pan = false) {
   const report = reports.find((item) => item.id === Number(id));
   if (!report) return false;
+
   selectedReportId = report.id;
+  ui.areaTitle.textContent = "Around this location";
   ui.areaName.textContent = report.location;
   ui.reportNumber.querySelector("span").textContent = report.id;
   ui.severity.textContent = report.severity;
   ui.title.textContent = report.title;
-  ui.meta.textContent = `Historical report · ${report.date}`;
+  ui.meta.textContent = `${report.isNew ? "Community report" : "Historical report"} · ${report.date}`;
   ui.rainfall.textContent = report.rainfall;
   ui.copy.textContent = report.notes;
   ui.duration.textContent = report.duration;
   ui.depth.textContent = report.depth;
   ui.evidence.hidden = true;
   ui.evidenceButton.textContent = "View details";
+
+  const hasPhoto = Boolean(report.photoUrl);
+  ui.evidenceVisual.hidden = hasPhoto;
+  ui.reportPhoto.hidden = !hasPhoto;
+  ui.evidenceTagText.textContent = hasPhoto
+    ? "Photo-supported community report"
+    : "Community reported";
+
+  if (hasPhoto) {
+    ui.reportPhotoImage.src = report.photoUrl;
+    ui.reportPhotoImage.alt = `${report.title} at ${report.location}`;
+  } else {
+    ui.reportPhotoImage.removeAttribute("src");
+  }
+
   if (pan) map.flyTo([report.lat, report.lng], 16, { duration: 0.6 });
   return true;
 }
@@ -154,8 +252,289 @@ function showToast(message) {
   window.clearTimeout(toastTimer);
   ui.toast.textContent = message;
   ui.toast.classList.add("show");
-  toastTimer = window.setTimeout(() => ui.toast.classList.remove("show"), 2600);
+  toastTimer = window.setTimeout(() => ui.toast.classList.remove("show"), 2800);
 }
+
+function requestNominatim(url) {
+  const run = async () => {
+    const elapsed = Date.now() - lastNominatimRequestAt;
+    const waitMs = Math.max(0, 1000 - elapsed);
+    if (waitMs > 0) {
+      await new Promise((resolve) => window.setTimeout(resolve, waitMs));
+    }
+
+    lastNominatimRequestAt = Date.now();
+    const response = await fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`Location service returned ${response.status}.`);
+    return response.json();
+  };
+
+  const result = nominatimQueue.then(run, run);
+  nominatimQueue = result.catch(() => undefined);
+  return result;
+}
+
+function compactLocation(result) {
+  const address = result?.address || {};
+  const street = [address.house_number, address.road || address.pedestrian].filter(Boolean).join(" ");
+  const district = address.neighbourhood || address.quarter || address.suburb;
+  const parts = [result?.name, street, district, "Melbourne", address.postcode].filter(Boolean);
+  const uniqueParts = parts.filter((part, index) => parts.indexOf(part) === index);
+  if (uniqueParts.length) return uniqueParts.join(", ");
+  return String(result?.display_name || "Melbourne CBD location")
+    .split(",")
+    .slice(0, 4)
+    .join(",");
+}
+
+async function searchMelbourneCbd(query) {
+  const params = new URLSearchParams({
+    q: `${query}, Melbourne CBD, Victoria, Australia`,
+    format: "jsonv2",
+    addressdetails: "1",
+    limit: "5",
+    viewbox: `${melbourneCbd.west},${melbourneCbd.north},${melbourneCbd.east},${melbourneCbd.south}`,
+    bounded: "1",
+    countrycodes: "au",
+  });
+
+  const results = await requestNominatim(
+    `https://nominatim.openstreetmap.org/search?${params.toString()}`,
+  );
+
+  return results
+    .map((result) => ({
+      label: compactLocation(result),
+      fullLabel: result.display_name,
+      lat: Number(result.lat),
+      lng: Number(result.lon),
+    }))
+    .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lng))
+    .filter((place) => isInsideMelbourneCbd(place.lat, place.lng));
+}
+
+async function reverseGeocode(lat, lng) {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lon: String(lng),
+    format: "jsonv2",
+    addressdetails: "1",
+    zoom: "18",
+  });
+  const result = await requestNominatim(
+    `https://nominatim.openstreetmap.org/reverse?${params.toString()}`,
+  );
+  return compactLocation(result);
+}
+
+function renderSearchResults(matches) {
+  ui.searchResults.replaceChildren();
+
+  if (!matches.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-result";
+    empty.textContent = "No matching Melbourne CBD location was found. Try a street number, building or landmark.";
+    ui.searchResults.append(empty);
+    ui.searchResults.hidden = false;
+    return;
+  }
+
+  matches.forEach((place) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("role", "option");
+    button.title = place.fullLabel;
+    button.textContent = place.label;
+    button.addEventListener("click", () => choosePlace(place));
+    ui.searchResults.append(button);
+  });
+  ui.searchResults.hidden = false;
+}
+
+function choosePlace(place) {
+  ui.searchInput.value = place.label;
+  ui.searchResults.hidden = true;
+  ui.areaTitle.textContent = "Selected location";
+  ui.areaName.textContent = place.label;
+  setSelectedLocation(place.lat, place.lng);
+  map.flyTo([place.lat, place.lng], 17, { duration: 0.7 });
+  showToast("Location found. Click the map to report an observation there.");
+}
+
+ui.searchInput.addEventListener("input", () => {
+  ui.searchResults.hidden = true;
+  ui.searchStatus.textContent = "";
+});
+
+ui.searchInput.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") ui.searchResults.hidden = true;
+});
+
+ui.searchForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const query = ui.searchInput.value.trim();
+  if (query.length < 2) {
+    showToast("Enter at least two characters to search Melbourne CBD.");
+    return;
+  }
+
+  ui.searchForm.setAttribute("aria-busy", "true");
+  ui.searchButton.disabled = true;
+  ui.searchButton.textContent = "Searching";
+  ui.searchStatus.textContent = "Searching Melbourne CBD locations.";
+  ui.searchResults.hidden = true;
+
+  try {
+    const matches = await searchMelbourneCbd(query);
+    renderSearchResults(matches);
+    ui.searchStatus.textContent = matches.length
+      ? `${matches.length} Melbourne CBD locations found.`
+      : "No matching Melbourne CBD locations found.";
+  } catch (_error) {
+    ui.searchStatus.textContent = "Location search is temporarily unavailable.";
+    showToast("Location search is temporarily unavailable. You can still click the map to report.");
+  } finally {
+    ui.searchForm.removeAttribute("aria-busy");
+    ui.searchButton.disabled = false;
+    ui.searchButton.textContent = "Find";
+  }
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".search")) ui.searchResults.hidden = true;
+});
+
+function clearPendingPhoto({ revoke = true } = {}) {
+  if (pendingPhotoUrl && revoke) URL.revokeObjectURL(pendingPhotoUrl);
+  pendingPhotoUrl = null;
+  ui.photoInput.value = "";
+  ui.photoPreview.hidden = true;
+  ui.photoPreviewImage.removeAttribute("src");
+  ui.photoError.hidden = true;
+  ui.photoError.textContent = "";
+}
+
+ui.photoInput.addEventListener("change", () => {
+  const file = ui.photoInput.files?.[0];
+  clearPendingPhoto();
+  if (!file) return;
+
+  if (!allowedPhotoTypes.includes(file.type)) {
+    ui.photoError.textContent = "Choose a JPG, PNG or WebP image.";
+    ui.photoError.hidden = false;
+    return;
+  }
+
+  if (file.size > maxPhotoBytes) {
+    ui.photoError.textContent = "The photo must be 5 MB or smaller.";
+    ui.photoError.hidden = false;
+    return;
+  }
+
+  pendingPhotoUrl = URL.createObjectURL(file);
+  ui.photoPreviewImage.src = pendingPhotoUrl;
+  ui.photoPreview.hidden = false;
+});
+
+document.querySelector("#remove-photo").addEventListener("click", () => clearPendingPhoto());
+
+function openObservationDialogAt(lat, lng, initialLabel) {
+  if (!isInsideMelbourneCbd(lat, lng)) {
+    showToast("Choose a location inside the Melbourne CBD boundary.");
+    return;
+  }
+
+  locationRequestId += 1;
+  const requestId = locationRequestId;
+  const coordinateLabel = `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+
+  setSelectedLocation(lat, lng);
+  ui.observationLocation.value = initialLabel || coordinateLabel;
+  ui.observationLat.value = String(lat);
+  ui.observationLng.value = String(lng);
+  ui.observationNotes.value = "";
+  clearPendingPhoto();
+  ui.dialog.showModal();
+
+  void reverseGeocode(lat, lng)
+    .then((label) => {
+      if (requestId !== locationRequestId || !ui.dialog.open) return;
+      ui.observationLocation.value = label;
+    })
+    .catch(() => {
+      if (requestId === locationRequestId) {
+        showToast("Address lookup was unavailable. You can edit the pinned location manually.");
+      }
+    });
+}
+
+map.on("click", (event) => {
+  openObservationDialogAt(event.latlng.lat, event.latlng.lng);
+});
+
+document.querySelector("#report-button").addEventListener("click", () => {
+  const center = map.getCenter();
+  openObservationDialogAt(center.lat, center.lng, "Map centre, Melbourne CBD");
+});
+
+ui.dialog.addEventListener("close", () => {
+  locationRequestId += 1;
+  if (pendingPhotoUrl) clearPendingPhoto();
+});
+
+function createReport({ type, location, notes, lat, lng, photoUrl = null }) {
+  const center = map.getCenter();
+  const reportLat = Number.isFinite(Number(lat)) ? Number(lat) : center.lat;
+  const reportLng = Number.isFinite(Number(lng)) ? Number(lng) : center.lng;
+  const report = {
+    id: reports.length + 1,
+    title: type,
+    severity: "New observation",
+    location,
+    lat: reportLat,
+    lng: reportLng,
+    date: new Intl.DateTimeFormat("en-AU", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date()),
+    rainfall: "Pending",
+    notes,
+    duration: "Not provided",
+    depth: "Not provided",
+    isNew: true,
+    photoUrl,
+  };
+
+  reports.push(report);
+  addMarker(report);
+  selectReport(report.id, true);
+  ui.summary.textContent = `${reports.length} community reports shown`;
+  return report;
+}
+
+ui.form.addEventListener("submit", (event) => {
+  const submitter = event.submitter;
+  if (!submitter || submitter.id !== "submit-report") return;
+  event.preventDefault();
+  if (!ui.form.reportValidity()) return;
+
+  const photoUrl = pendingPhotoUrl;
+  pendingPhotoUrl = null;
+  const report = createReport({
+    type: ui.observationType.value,
+    location: ui.observationLocation.value.trim(),
+    notes: ui.observationNotes.value.trim(),
+    lat: Number(ui.observationLat.value),
+    lng: Number(ui.observationLng.value),
+    photoUrl,
+  });
+
+  ui.photoInput.value = "";
+  ui.photoPreview.hidden = true;
+  ui.photoPreviewImage.removeAttribute("src");
+  ui.dialog.close();
+  showToast(`Observation ${report.id} added to the map.`);
+});
 
 document.querySelectorAll("[data-view]").forEach((tab) => {
   tab.addEventListener("click", () => {
@@ -168,14 +547,14 @@ document.querySelectorAll("[data-view]").forEach((tab) => {
     drawHotspots(currentView === "hotspots");
     ui.legend.hidden = currentView !== "hotspots";
     ui.summary.textContent = currentView === "hotspots"
-      ? `${reports.length} sample hotspots shown · ${document.querySelector("#period-select").selectedOptions[0].textContent}`
-      : `${reports.length} recent sample reports shown`;
+      ? `${reports.length} community hotspots shown · ${document.querySelector("#period-select").selectedOptions[0].textContent}`
+      : `${reports.length} recent community reports shown`;
   });
 });
 
 document.querySelector("#period-select").addEventListener("change", (event) => {
   if (currentView === "hotspots") {
-    ui.summary.textContent = `${reports.length} sample hotspots shown · ${event.target.selectedOptions[0].textContent}`;
+    ui.summary.textContent = `${reports.length} community hotspots shown · ${event.target.selectedOptions[0].textContent}`;
   }
 });
 
@@ -187,94 +566,6 @@ ui.evidenceButton.addEventListener("click", () => {
 document.querySelector("#update-button").addEventListener("click", () => {
   const report = reports.find((item) => item.id === selectedReportId);
   showToast(`Update noted for ${report.title}.`);
-});
-
-const searchInput = document.querySelector("#location-search");
-const searchResults = document.querySelector("#search-results");
-
-function renderSearchResults(query) {
-  const matches = searchPlaces.filter((place) =>
-    place.label.toLowerCase().includes(query.trim().toLowerCase()),
-  );
-  searchResults.replaceChildren();
-  if (!query.trim() || matches.length === 0) {
-    searchResults.hidden = true;
-    return matches;
-  }
-  matches.slice(0, 5).forEach((place) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.setAttribute("role", "option");
-    button.textContent = place.label;
-    button.addEventListener("click", () => choosePlace(place));
-    searchResults.append(button);
-  });
-  searchResults.hidden = false;
-  return matches;
-}
-
-function choosePlace(place) {
-  searchInput.value = place.label;
-  searchResults.hidden = true;
-  map.flyTo([place.lat, place.lng], 16, { duration: 0.7 });
-  selectReport(place.reportId, false);
-}
-
-searchInput.addEventListener("input", () => renderSearchResults(searchInput.value));
-searchInput.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") searchResults.hidden = true;
-});
-
-document.querySelector("#search-form").addEventListener("submit", (event) => {
-  event.preventDefault();
-  const matches = renderSearchResults(searchInput.value);
-  if (matches.length) choosePlace(matches[0]);
-  else showToast("Try Elizabeth Street, Swanston Street, or Flinders Street Station.");
-});
-
-document.addEventListener("click", (event) => {
-  if (!event.target.closest(".search")) searchResults.hidden = true;
-});
-
-const dialog = document.querySelector("#report-dialog");
-const form = document.querySelector("#observation-form");
-document.querySelector("#report-button").addEventListener("click", () => dialog.showModal());
-
-function createReport({ type, location, notes }) {
-  const center = map.getCenter();
-  const report = {
-    id: reports.length + 1,
-    title: type,
-    severity: "New observation",
-    location,
-    lat: center.lat,
-    lng: center.lng,
-    date: "Just now",
-    rainfall: "Pending",
-    notes,
-    duration: "Not provided",
-    depth: "Not provided",
-  };
-  reports.push(report);
-  addMarker(report);
-  selectReport(report.id, true);
-  ui.summary.textContent = `${reports.length} sample reports shown`;
-  return report;
-}
-
-form.addEventListener("submit", (event) => {
-  const submitter = event.submitter;
-  if (!submitter || submitter.id !== "submit-report") return;
-  event.preventDefault();
-  if (!form.reportValidity()) return;
-  const report = createReport({
-    type: document.querySelector("#observation-type").value,
-    location: document.querySelector("#observation-location").value.trim(),
-    notes: document.querySelector("#observation-notes").value.trim(),
-  });
-  dialog.close();
-  document.querySelector("#observation-notes").value = "";
-  showToast(`Observation ${report.id} added to the sample map.`);
 });
 
 selectReport(2, false);
@@ -294,11 +585,17 @@ function registerWebMcpTools() {
   register({
     name: "list_flood_reports",
     title: "List flood reports",
-    description: "Read the flood observations currently displayed on the Melbourne map.",
+    description: "Read the flood observations currently displayed on the Melbourne CBD map.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     execute() {
-      return reports.map(({ id, title, location, date, severity }) => ({ id, title, location, date, severity }));
+      return reports.map(({ id, title, location, date, severity }) => ({
+        id,
+        title,
+        location,
+        date,
+        severity,
+      }));
     },
   });
 
@@ -325,13 +622,15 @@ function registerWebMcpTools() {
   register({
     name: "add_flood_report",
     title: "Add flood report",
-    description: "Add a new community flood observation at the current center of the visible map.",
+    description: "Add a new community flood observation at a Melbourne CBD coordinate or the current map centre.",
     inputSchema: {
       type: "object",
       properties: {
         type: { type: "string", enum: ["Water pooling", "Blocked drain", "Road flooding"] },
-        location: { type: "string", minLength: 3, maxLength: 120 },
+        location: { type: "string", minLength: 3, maxLength: 160 },
         notes: { type: "string", minLength: 5, maxLength: 500 },
+        latitude: { type: "number", minimum: melbourneCbd.south, maximum: melbourneCbd.north },
+        longitude: { type: "number", minimum: melbourneCbd.west, maximum: melbourneCbd.east },
       },
       required: ["type", "location", "notes"],
       additionalProperties: false,
@@ -348,12 +647,22 @@ function registerWebMcpTools() {
       ) {
         throw new Error("A valid type, location, and observation note are required.");
       }
+
+      if (
+        (input.latitude !== undefined || input.longitude !== undefined) &&
+        !isInsideMelbourneCbd(Number(input.latitude), Number(input.longitude))
+      ) {
+        throw new Error("The report coordinate must be inside Melbourne CBD.");
+      }
+
       const report = createReport({
         type: input.type,
         location: input.location.trim(),
         notes: input.notes.trim(),
+        lat: input.latitude,
+        lng: input.longitude,
       });
-      showToast(`Observation ${report.id} added to the sample map.`);
+      showToast(`Observation ${report.id} added to the map.`);
       return { reportId: report.id, status: "added", location: report.location };
     },
   });

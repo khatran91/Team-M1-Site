@@ -88,11 +88,13 @@ Team-M1-Site/
 - Interactive Melbourne CBD map powered by Leaflet and OpenStreetMap.
 - Search for addresses, buildings and landmarks throughout Melbourne CBD.
 - Click any CBD location on the map to open a pre-filled observation form.
+- Search and choose from the main Melbourne CBD streets and intersections inside the report form.
 - Sample flood hotspots and numbered incident markers.
 - Recent reports and past hotspots views.
 - Time-period selector.
 - Incident detail panel.
-- Observation form with an optional JPG, PNG or WebP photo attachment.
+- Expanded observation categories and a report form that can be dismissed with Close, Cancel, Escape, or a backdrop click.
+- Optional JPG, PNG or WebP photo attachment.
 - Responsive layout for desktop and mobile screens.
 
 ## Important prototype limitations

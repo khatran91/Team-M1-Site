@@ -60,6 +60,74 @@ const melbourneCbdBounds = [
 
 const maxPhotoBytes = 5 * 1024 * 1024;
 const allowedPhotoTypes = ["image/jpeg", "image/png", "image/webp"];
+const observationTypes = [
+  "Water pooling",
+  "Blocked drain",
+  "Road flooding",
+  "Footpath flooding",
+  "Building entrance flooding",
+  "Car park flooding",
+  "Underpass flooding",
+  "Stormwater overflow",
+  "Creek or river overflow",
+  "Debris blocking water flow",
+  "Traffic disruption",
+  "Other flood impact",
+];
+
+const eastWestCbdStreets = [
+  "Victoria Street",
+  "Franklin Street",
+  "A'Beckett Street",
+  "La Trobe Street",
+  "Little Lonsdale Street",
+  "Lonsdale Street",
+  "Little Bourke Street",
+  "Bourke Street",
+  "Little Collins Street",
+  "Collins Street",
+  "Flinders Lane",
+  "Flinders Street",
+];
+
+const northSouthCbdStreets = [
+  "Spencer Street",
+  "King Street",
+  "William Street",
+  "Queen Street",
+  "Elizabeth Street",
+  "Swanston Street",
+  "Russell Street",
+  "Exhibition Street",
+  "Spring Street",
+];
+
+const additionalCbdStreets = [
+  "Batman Street",
+  "Dudley Street",
+  "Hardware Lane",
+  "Market Street",
+  "McKillop Street",
+  "Degraves Street",
+  "Wurundjeri Way",
+];
+
+const cbdLocationChoices = [
+  ...[...eastWestCbdStreets, ...northSouthCbdStreets, ...additionalCbdStreets].map((label) => ({
+    id: `street:${label}`,
+    label,
+    query: label,
+    group: "Streets and lanes",
+  })),
+  ...eastWestCbdStreets.flatMap((eastWestStreet) =>
+    northSouthCbdStreets.map((northSouthStreet) => ({
+      id: `intersection:${eastWestStreet}|${northSouthStreet}`,
+      label: `${eastWestStreet} & ${northSouthStreet}`,
+      query: `${eastWestStreet} ${northSouthStreet}`,
+      group: "Intersections",
+    })),
+  ),
+];
 
 const map = L.map("map", {
   zoomControl: true,
@@ -195,9 +263,15 @@ const ui = {
   form: document.querySelector("#observation-form"),
   observationType: document.querySelector("#observation-type"),
   observationLocation: document.querySelector("#observation-location"),
+  observationLocationChoice: document.querySelector("#observation-location-choice"),
+  reportLocationSearch: document.querySelector("#report-location-search"),
+  reportLocationHelp: document.querySelector("#report-location-help"),
   observationLat: document.querySelector("#observation-lat"),
   observationLng: document.querySelector("#observation-lng"),
   observationNotes: document.querySelector("#observation-notes"),
+  closeReportDialog: document.querySelector("#close-report-dialog"),
+  cancelReport: document.querySelector("#cancel-report"),
+  submitReport: document.querySelector("#submit-report"),
   photoInput: document.querySelector("#observation-photo"),
   photoError: document.querySelector("#photo-error"),
   photoPreview: document.querySelector("#photo-preview"),
@@ -209,6 +283,8 @@ let currentView = "hotspots";
 let toastTimer;
 let pendingPhotoUrl = null;
 let locationRequestId = 0;
+let reportLocationRequestId = 0;
+let pinnedReportLocation = null;
 let lastNominatimRequestAt = 0;
 let nominatimQueue = Promise.resolve();
 
@@ -404,10 +480,10 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".search")) ui.searchResults.hidden = true;
 });
 
-function clearPendingPhoto({ revoke = true } = {}) {
+function clearPendingPhoto({ revoke = true, clearInput = true } = {}) {
   if (pendingPhotoUrl && revoke) URL.revokeObjectURL(pendingPhotoUrl);
   pendingPhotoUrl = null;
-  ui.photoInput.value = "";
+  if (clearInput) ui.photoInput.value = "";
   ui.photoPreview.hidden = true;
   ui.photoPreviewImage.removeAttribute("src");
   ui.photoError.hidden = true;
@@ -416,16 +492,18 @@ function clearPendingPhoto({ revoke = true } = {}) {
 
 ui.photoInput.addEventListener("change", () => {
   const file = ui.photoInput.files?.[0];
-  clearPendingPhoto();
+  clearPendingPhoto({ clearInput: false });
   if (!file) return;
 
   if (!allowedPhotoTypes.includes(file.type)) {
+    ui.photoInput.value = "";
     ui.photoError.textContent = "Choose a JPG, PNG or WebP image.";
     ui.photoError.hidden = false;
     return;
   }
 
   if (file.size > maxPhotoBytes) {
+    ui.photoInput.value = "";
     ui.photoError.textContent = "The photo must be 5 MB or smaller.";
     ui.photoError.hidden = false;
     return;
@@ -438,6 +516,145 @@ ui.photoInput.addEventListener("change", () => {
 
 document.querySelector("#remove-photo").addEventListener("click", () => clearPendingPhoto());
 
+function matchesLocationFilter(choice, filter) {
+  const terms = filter.toLowerCase().split(/\s+/).filter(Boolean);
+  const searchableLabel = choice.label.toLowerCase();
+  return terms.every((term) => searchableLabel.includes(term));
+}
+
+function renderReportLocationChoices(filter = "", selectedValue = "") {
+  const select = ui.observationLocationChoice;
+  select.replaceChildren();
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Choose a street or intersection";
+  select.append(placeholder);
+
+  if (pinnedReportLocation) {
+    const pinnedOption = document.createElement("option");
+    pinnedOption.value = "map-pin";
+    pinnedOption.textContent = `Map pin — ${pinnedReportLocation.label}`;
+    select.append(pinnedOption);
+  }
+
+  const matches = cbdLocationChoices.filter((choice) => matchesLocationFilter(choice, filter));
+  ["Streets and lanes", "Intersections"].forEach((groupName) => {
+    const groupedMatches = matches.filter((choice) => choice.group === groupName);
+    if (!groupedMatches.length) return;
+
+    const group = document.createElement("optgroup");
+    group.label = groupName;
+    groupedMatches.forEach((choice) => {
+      const option = document.createElement("option");
+      option.value = choice.id;
+      option.textContent = choice.label;
+      group.append(option);
+    });
+    select.append(group);
+  });
+
+  if (!matches.length && !pinnedReportLocation) {
+    const emptyOption = document.createElement("option");
+    emptyOption.disabled = true;
+    emptyOption.textContent = "No matching CBD street or intersection";
+    select.append(emptyOption);
+  }
+
+  const hasSelectedValue = [...select.options].some((option) => option.value === selectedValue);
+  select.value = hasSelectedValue ? selectedValue : "";
+
+  if (filter) {
+    ui.reportLocationHelp.textContent = matches.length
+      ? `${matches.length} matching locations. Choose one from the dropdown.`
+      : "No list match. Try another street name, or click the map for an exact point.";
+  } else {
+    ui.reportLocationHelp.textContent = `${cbdLocationChoices.length} main CBD streets and intersections available, plus your map pin.`;
+  }
+}
+
+function useReportLocation({ label, lat, lng }) {
+  ui.observationLocation.value = label;
+  ui.observationLat.value = String(lat);
+  ui.observationLng.value = String(lng);
+  setSelectedLocation(lat, lng);
+}
+
+function setReportLocationBusy(isBusy) {
+  ui.observationLocationChoice.disabled = isBusy;
+  ui.submitReport.disabled = isBusy;
+  if (isBusy) ui.reportLocationHelp.textContent = "Finding that location on the CBD map…";
+}
+
+async function chooseReportLocation(value) {
+  locationRequestId += 1;
+  reportLocationRequestId += 1;
+  const requestId = reportLocationRequestId;
+
+  if (!value) {
+    ui.observationLocation.value = "";
+    ui.observationLat.value = "";
+    ui.observationLng.value = "";
+    return;
+  }
+
+  if (value === "map-pin" && pinnedReportLocation) {
+    useReportLocation(pinnedReportLocation);
+    ui.reportLocationHelp.textContent = "Using the exact point selected on the map.";
+    return;
+  }
+
+  const choice = cbdLocationChoices.find((item) => item.id === value);
+  if (!choice) return;
+
+  setReportLocationBusy(true);
+  try {
+    const [match] = await searchMelbourneCbd(choice.query);
+    if (requestId !== reportLocationRequestId || !ui.dialog.open) return;
+    if (!match) throw new Error("Location not found");
+
+    useReportLocation({ label: choice.label, lat: match.lat, lng: match.lng });
+    ui.reportLocationHelp.textContent = `${choice.label} selected.`;
+  } catch (_error) {
+    if (requestId !== reportLocationRequestId || !ui.dialog.open) return;
+    ui.observationLocationChoice.value = "";
+    ui.observationLocation.value = "";
+    ui.observationLat.value = "";
+    ui.observationLng.value = "";
+    ui.reportLocationHelp.textContent = "That location could not be placed. Try again, or close this form and click the map.";
+    showToast("We could not place that location. Try another option or click the map.");
+  } finally {
+    if (requestId === reportLocationRequestId) setReportLocationBusy(false);
+  }
+}
+
+ui.reportLocationSearch.addEventListener("input", () => {
+  const currentValue = ui.observationLocationChoice.value;
+  renderReportLocationChoices(ui.reportLocationSearch.value.trim(), currentValue);
+});
+
+ui.observationLocationChoice.addEventListener("change", () => {
+  void chooseReportLocation(ui.observationLocationChoice.value);
+});
+
+function closeObservationDialog() {
+  if (ui.dialog.open) ui.dialog.close("cancel");
+}
+
+ui.closeReportDialog.addEventListener("click", closeObservationDialog);
+ui.cancelReport.addEventListener("click", closeObservationDialog);
+
+ui.dialog.addEventListener("click", (event) => {
+  if (event.target !== ui.dialog) return;
+  const bounds = ui.dialog.getBoundingClientRect();
+  const clickedInside =
+    event.clientX >= bounds.left &&
+    event.clientX <= bounds.right &&
+    event.clientY >= bounds.top &&
+    event.clientY <= bounds.bottom;
+  if (!clickedInside) closeObservationDialog();
+});
+
 function openObservationDialogAt(lat, lng, initialLabel) {
   if (!isInsideMelbourneCbd(lat, lng)) {
     showToast("Choose a location inside the Melbourne CBD boundary.");
@@ -448,10 +665,15 @@ function openObservationDialogAt(lat, lng, initialLabel) {
   const requestId = locationRequestId;
   const coordinateLabel = `Pinned location (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
 
-  setSelectedLocation(lat, lng);
-  ui.observationLocation.value = initialLabel || coordinateLabel;
-  ui.observationLat.value = String(lat);
-  ui.observationLng.value = String(lng);
+  pinnedReportLocation = {
+    label: initialLabel || coordinateLabel,
+    lat,
+    lng,
+  };
+  useReportLocation(pinnedReportLocation);
+  ui.reportLocationSearch.value = "";
+  renderReportLocationChoices("", "map-pin");
+  ui.observationType.value = "";
   ui.observationNotes.value = "";
   clearPendingPhoto();
   ui.dialog.showModal();
@@ -459,11 +681,14 @@ function openObservationDialogAt(lat, lng, initialLabel) {
   void reverseGeocode(lat, lng)
     .then((label) => {
       if (requestId !== locationRequestId || !ui.dialog.open) return;
-      ui.observationLocation.value = label;
+      pinnedReportLocation = { label, lat, lng };
+      useReportLocation(pinnedReportLocation);
+      renderReportLocationChoices(ui.reportLocationSearch.value.trim(), "map-pin");
+      ui.reportLocationHelp.textContent = "Using the exact point selected on the map.";
     })
     .catch(() => {
       if (requestId === locationRequestId) {
-        showToast("Address lookup was unavailable. You can edit the pinned location manually.");
+        ui.reportLocationHelp.textContent = "Using the map pin. Address lookup is temporarily unavailable.";
       }
     });
 }
@@ -479,6 +704,8 @@ document.querySelector("#report-button").addEventListener("click", () => {
 
 ui.dialog.addEventListener("close", () => {
   locationRequestId += 1;
+  reportLocationRequestId += 1;
+  setReportLocationBusy(false);
   if (pendingPhotoUrl) clearPendingPhoto();
 });
 
@@ -626,7 +853,7 @@ function registerWebMcpTools() {
     inputSchema: {
       type: "object",
       properties: {
-        type: { type: "string", enum: ["Water pooling", "Blocked drain", "Road flooding"] },
+        type: { type: "string", enum: observationTypes },
         location: { type: "string", minLength: 3, maxLength: 160 },
         notes: { type: "string", minLength: 5, maxLength: 500 },
         latitude: { type: "number", minimum: melbourneCbd.south, maximum: melbourneCbd.north },
@@ -639,7 +866,7 @@ function registerWebMcpTools() {
     execute(input) {
       if (
         !input ||
-        !["Water pooling", "Blocked drain", "Road flooding"].includes(input.type) ||
+        !observationTypes.includes(input.type) ||
         typeof input.location !== "string" ||
         input.location.trim().length < 3 ||
         typeof input.notes !== "string" ||

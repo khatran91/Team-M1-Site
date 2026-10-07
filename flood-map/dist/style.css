@@ -840,11 +840,13 @@ footer p {
 
 dialog {
   width: min(520px, calc(100vw - 32px));
+  max-height: min(90vh, 860px);
   padding: 0;
   color: var(--navy);
   border: 0;
   border-radius: 18px;
   box-shadow: 0 30px 80px rgba(4, 36, 68, 0.3);
+  overflow: auto;
 }
 
 dialog::backdrop {
@@ -900,6 +902,56 @@ dialog textarea {
 
 dialog textarea {
   resize: vertical;
+}
+
+.location-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.field-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field-heading label {
+  font-weight: 800;
+}
+
+.field-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.location-filter {
+  position: relative;
+}
+
+.location-filter svg {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 12px;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.location-filter input {
+  padding-left: 39px;
+}
+
+.location-picker select:disabled,
+.dialog-actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .photo-field {

@@ -176,21 +176,53 @@
             <p class="eyebrow">Community observation</p>
             <h2>Report what you can see</h2>
           </div>
-          <button class="icon-button" value="cancel" aria-label="Close report form">×</button>
+          <button
+            type="button"
+            class="icon-button"
+            id="close-report-dialog"
+            aria-label="Close report form"
+          >×</button>
         </div>
 
         <label>
           Observation type
           <select id="observation-type" required>
+            <option value="">Choose an observation type</option>
             <option value="Water pooling">Water pooling</option>
             <option value="Blocked drain">Blocked drain</option>
             <option value="Road flooding">Road flooding</option>
+            <option value="Footpath flooding">Footpath flooding</option>
+            <option value="Building entrance flooding">Building entrance flooding</option>
+            <option value="Car park flooding">Car park flooding</option>
+            <option value="Underpass flooding">Underpass flooding</option>
+            <option value="Stormwater overflow">Stormwater overflow</option>
+            <option value="Creek or river overflow">Creek or river overflow</option>
+            <option value="Debris blocking water flow">Debris blocking water flow</option>
+            <option value="Traffic disruption">Traffic disruption</option>
+            <option value="Other flood impact">Other flood impact</option>
           </select>
         </label>
-        <label>
-          Location
-          <input id="observation-location" value="Melbourne CBD" required />
-        </label>
+        <div class="location-picker">
+          <div class="field-heading">
+            <label for="report-location-search">Street or intersection</label>
+            <span>Melbourne CBD</span>
+          </div>
+          <div class="location-filter">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
+            <input
+              id="report-location-search"
+              type="search"
+              autocomplete="off"
+              placeholder="Filter by street name…"
+              aria-controls="observation-location-choice"
+            />
+          </div>
+          <select id="observation-location-choice" required aria-describedby="report-location-help"></select>
+          <p class="form-help" id="report-location-help" aria-live="polite">
+            Choose from the main CBD grid, or close this form and click the map for an exact point.
+          </p>
+        </div>
+        <input id="observation-location" type="hidden" />
         <input id="observation-lat" type="hidden" />
         <input id="observation-lng" type="hidden" />
         <label>
@@ -209,8 +241,8 @@
         </div>
         <p class="form-help">Reports and photos stay on this device until the page is refreshed.</p>
         <div class="dialog-actions">
-          <button class="secondary-button" value="cancel">Cancel</button>
-          <button class="primary-button compact" value="default" id="submit-report">Add to map</button>
+          <button type="button" class="secondary-button" id="cancel-report">Cancel</button>
+          <button type="submit" class="primary-button compact" id="submit-report">Add to map</button>
         </div>
       </form>
     </dialog>

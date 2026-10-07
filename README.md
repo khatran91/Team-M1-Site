@@ -1,4 +1,4 @@
-# Melbourne Community Flood Map
+# Team M1 — Melbourne Community Flood Map
 
 A basic, responsive flood-observation map for Melbourne CBD. The prototype uses sample community reports to demonstrate hotspots, report details, location search, and a simple observation form.
 
@@ -26,13 +26,21 @@ On Windows, use this command if `python3` is unavailable:
 py --version
 ```
 
-## Run locally
+## Download and run
+
+Clone the repository:
+
+```bash
+git clone https://github.com/khatran91/Team-M1-Site.git
+cd Team-M1-Site
+```
 
 ### macOS or Linux
 
-Open Terminal and run:
+From the repository folder, run:
 
 ```bash
+cd flood-map
 python3 -m http.server 4173 --directory dist
 ```
 
@@ -40,16 +48,16 @@ Open [http://localhost:4173](http://localhost:4173) in your browser.
 
 ### Windows
 
-Open PowerShell, move into the project folder, and run:
+From the repository folder, run in PowerShell:
 
 ```powershell
-cd "path\to\Team-M1-Site\flood-map"
+cd flood-map
 py -m http.server 4173 --directory dist
 ```
 
 Open [http://localhost:4173](http://localhost:4173) in your browser.
 
-Keep the terminal open while using the site. Press `Control + C` in the terminal to stop the server.
+Keep the terminal open while using the site. Press `Control + C` to stop the server.
 
 ## If port 4173 is already in use
 
@@ -59,18 +67,19 @@ Choose another port, for example 8080:
 python3 -m http.server 8080 --directory dist
 ```
 
-Then open [http://localhost:8080](http://localhost:8080).
+On Windows, use `py` instead of `python3`. Then open [http://localhost:8080](http://localhost:8080).
 
 ## Project structure
 
 ```text
-flood-map/
-├── dist/
-│   ├── index.html    # Page structure and content
-│   ├── style.css     # Layout, colours, and responsive styles
-│   └── app.js        # Map data and interactions
-├── .openai/
-│   └── hosting.json  # Hosting configuration
+Team-M1-Site/
+├── flood-map/
+│   ├── dist/
+│   │   ├── index.html    # Page structure and content
+│   │   ├── style.css     # Layout, colours, and responsive styles
+│   │   └── app.js        # Map data and interactions
+│   └── .openai/
+│       └── hosting.json  # Hosting configuration
 └── README.md
 ```
 
@@ -87,14 +96,14 @@ flood-map/
 
 ## Important prototype limitations
 
-- All flood reports are sample data stored in `dist/app.js`.
+- All flood reports are sample data stored in `flood-map/dist/app.js`.
 - New observations are temporary and disappear when the page is refreshed.
-- Search currently recognises only the sample locations defined in `dist/app.js`.
+- Search currently recognises only the sample locations defined in `flood-map/dist/app.js`.
 - The map should not be used for emergency decisions or as an official flood warning.
 
 ## Editing the site
 
-Edit the files inside `dist/`, save your changes, and refresh the browser. No build command is required.
+Edit the files inside `flood-map/dist/`, save your changes, and refresh the browser. No build command is required.
 
 If a change does not appear, perform a hard refresh:
 
@@ -118,4 +127,4 @@ Stop the other local server or follow the alternate-port instructions above.
 
 ### The page was opened directly from the file system
 
-Run the local server and use a `http://localhost:...` address. Do not rely on opening `dist/index.html` by double-clicking it.
+Run the local server and use a `http://localhost:...` address. Do not rely on opening `flood-map/dist/index.html` by double-clicking it.

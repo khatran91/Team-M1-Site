@@ -4,6 +4,14 @@ A basic, responsive flood-observation map for Melbourne CBD. The prototype uses 
 
 > This prototype displays sample community observations. It is not a flood forecast or emergency service.
 
+## Public site and QR code
+
+GitHub Pages URL: [https://khatran91.github.io/Team-M1-Site/](https://khatran91.github.io/Team-M1-Site/)
+
+The printable QR code below opens that public URL directly. The source image is stored at `flood-map/dist/assets/melbourne-flood-map-qr.png`.
+
+![QR code for the Melbourne Community Flood Map](flood-map/dist/assets/melbourne-flood-map-qr.png)
+
 ## Requirements
 
 You only need:
@@ -86,6 +94,7 @@ Team-M1-Site/
 ## Current functionality
 
 - Interactive Melbourne CBD map powered by Leaflet and OpenStreetMap.
+- No sign-in is required to view the map or add a temporary report.
 - Search for addresses, buildings and landmarks throughout Melbourne CBD.
 - Click any CBD location on the map to open a pre-filled observation form.
 - Search and choose from the main Melbourne CBD streets and intersections inside the report form.
@@ -104,6 +113,7 @@ Team-M1-Site/
 
 - All flood reports are sample data stored in `flood-map/dist/app.js`.
 - New observations and attached photos are temporary and disappear when the page is refreshed.
+- Reports are currently stored only in each visitor's browser session, so they are not shared with other visitors.
 - Location search and address lookup depend on the public OpenStreetMap Nominatim service.
 - The map should not be used for emergency decisions or as an official flood warning.
 

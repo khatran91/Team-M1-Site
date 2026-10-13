@@ -21,6 +21,14 @@
       integrity="sha256-p4NxAoJBhIINfQ3ynhHd7i2qEg8dJpZ24i4fi/3qpsA="
       crossorigin=""
     />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+    />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
@@ -40,12 +48,12 @@
           <circle cx="11" cy="11" r="6.8"></circle>
           <path d="m16 16 5 5"></path>
         </svg>
-        <label class="sr-only" for="location-search">Find any Melbourne CBD address or landmark</label>
+        <label class="sr-only" for="location-search">Find an address or landmark in the Elizabeth Street catchment</label>
         <input
           id="location-search"
           type="search"
           autocomplete="off"
-          placeholder="Search any Melbourne CBD location…"
+          placeholder="Search inside the Elizabeth Street catchment…"
         />
         <button type="submit">Find</button>
         <div class="search-results" id="search-results" role="listbox" hidden></div>
@@ -54,7 +62,7 @@
     </header>
 
     <main class="workspace">
-      <section class="map-shell" aria-label="Flood observations map">
+      <section class="map-shell" aria-label="Flood observations map for the Elizabeth Street catchment">
         <div class="map-toolbar">
           <div class="tabs" role="tablist" aria-label="Map display">
             <button id="recent-tab" role="tab" aria-selected="false" data-view="recent">
@@ -76,11 +84,11 @@
           </label>
         </div>
 
-        <div id="map" aria-label="Interactive map of flood observations in Melbourne CBD"></div>
+        <div id="map" aria-label="Interactive map of flood observations in the Elizabeth Street catchment"></div>
 
         <div class="map-instruction">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.3 6-11a6 6 0 1 0-12 0c0 5.7 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg>
-          Click anywhere on the map to report an observation
+          Click inside the outlined catchment to report the exact location
         </div>
 
         <div class="legend" id="legend">
@@ -93,6 +101,7 @@
             <span><i class="severity-dot severity-high"></i>High</span>
           </div>
           <small>No reports does not mean no risk.</small>
+          <small class="boundary-key"><i></i>Outside the indicative catchment is greyed out.</small>
         </div>
 
         <div class="map-summary" aria-live="polite">
@@ -122,7 +131,8 @@
             <div class="rain-lines" aria-hidden="true"></div>
             <div>
               <strong id="rainfall-value">38 mm</strong>
-              <span>rainfall that day</span>
+              <span id="rainfall-label">rainfall that day</span>
+              <p id="rainfall-comparison">12 mm above the recent daily average</p>
             </div>
             <svg viewBox="0 0 86 54" aria-hidden="true">
               <path d="M4 45h78" />
@@ -149,11 +159,19 @@
           </div>
           <div class="evidence-details" id="evidence-details" hidden>
             <dl>
-              <div><dt>Duration</dt><dd id="report-duration">45–60 min</dd></div>
-              <div><dt>Depth</dt><dd id="report-depth">Kerb height</dd></div>
-              <div><dt>Verified</dt><dd>Community report</dd></div>
+              <div><dt>Observed depth</dt><dd id="report-depth">At or above 150 mm kerb</dd></div>
+              <div><dt>Rainfall source</dt><dd id="rainfall-source">Sample data</dd></div>
+              <div><dt>Exact pin</dt><dd id="report-coordinates">−37.81390, 144.96220</dd></div>
             </dl>
           </div>
+          <section class="update-log" aria-labelledby="update-log-title">
+            <div class="update-log-heading">
+              <h3 id="update-log-title">Community updates</h3>
+              <span id="update-count">0</span>
+            </div>
+            <p class="empty-updates" id="empty-updates">No updates have been added yet.</p>
+            <ol id="update-list"></ol>
+          </section>
         </article>
 
         <button class="primary-button" id="report-button">
@@ -220,7 +238,7 @@
         <div class="location-picker">
           <div class="field-heading">
             <label for="report-location-search">Street or intersection</label>
-            <span>Melbourne CBD</span>
+            <span>Elizabeth Street catchment</span>
           </div>
           <div class="location-filter">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg>
@@ -234,12 +252,23 @@
           </div>
           <select id="observation-location-choice" required aria-describedby="report-location-help"></select>
           <p class="form-help" id="report-location-help" aria-live="polite">
-            Choose from the main CBD grid, or close this form and click the map for an exact point.
+            The map pin is the report location. You can also search for a street or intersection inside the catchment.
           </p>
         </div>
         <input id="observation-location" type="hidden" />
         <input id="observation-lat" type="hidden" />
         <input id="observation-lng" type="hidden" />
+        <p class="coordinate-readout" id="coordinate-readout">Exact pin: not selected</p>
+        <label>
+          Observed water depth
+          <select id="observation-depth" required>
+            <option value="">Choose the closest observation</option>
+            <option value="Below typical kerb (&lt;150 mm)">Below the typical kerb (&lt;150 mm)</option>
+            <option value="At or above typical kerb (≥150 mm)">At or above the typical kerb (≥150 mm)</option>
+            <option value="Unable to tell">Unable to tell</option>
+          </select>
+          <span class="form-help">Uses 150 mm as the typical City of Melbourne bluestone kerb reference. This is your observation, not calculated from rainfall.</span>
+        </label>
         <label>
           What did you notice?
           <textarea id="observation-notes" rows="4" placeholder="For example: water reached the kerb and was slow to drain." required></textarea>
@@ -254,10 +283,65 @@
             <button type="button" class="remove-photo" id="remove-photo">Remove photo</button>
           </div>
         </div>
-        <p class="form-help">Reports and photos stay on this device until the page is refreshed.</p>
+        <p class="form-help" id="rainfall-form-help">Today’s rainfall and a 30-day comparison will be attached automatically when available.</p>
+        <p class="form-help">Prototype reports and photos stay on this device until the page is refreshed.</p>
         <div class="dialog-actions">
           <button type="button" class="secondary-button" id="cancel-report">Cancel</button>
           <button type="submit" class="primary-button compact" id="submit-report">Add to map</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="update-dialog">
+      <form method="dialog" id="update-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">Existing report</p>
+            <h2>Add a community update</h2>
+          </div>
+          <button type="button" class="icon-button" id="close-update-dialog" aria-label="Close update form">×</button>
+        </div>
+        <p class="dialog-context" id="update-report-context"></p>
+        <label>
+          What has changed?
+          <textarea id="update-notes" rows="4" maxlength="300" placeholder="For example: water has receded and the footpath is clear." required></textarea>
+          <span class="form-help">Keep the update brief. Maximum 300 characters.</span>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="secondary-button" id="cancel-update">Cancel</button>
+          <button type="submit" class="primary-button compact" id="submit-update">Add update</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="survey-dialog">
+      <form method="dialog" id="survey-form">
+        <div class="dialog-heading">
+          <div>
+            <p class="eyebrow">One-minute survey</p>
+            <h2>How was reporting?</h2>
+          </div>
+          <button type="button" class="icon-button" id="close-survey-dialog" aria-label="Close survey">×</button>
+        </div>
+        <p class="dialog-context">During the platform’s first month, we are asking each device once for quick usability feedback.</p>
+        <fieldset>
+          <legend>How easy was it to submit your report?</legend>
+          <div class="rating-options">
+            <label><input type="radio" name="survey-rating" value="1" required />1</label>
+            <label><input type="radio" name="survey-rating" value="2" />2</label>
+            <label><input type="radio" name="survey-rating" value="3" />3</label>
+            <label><input type="radio" name="survey-rating" value="4" />4</label>
+            <label><input type="radio" name="survey-rating" value="5" />5</label>
+          </div>
+          <span class="form-help">1 = difficult, 5 = very easy</span>
+        </fieldset>
+        <label>
+          Optional comment
+          <textarea id="survey-comment" rows="3" maxlength="300" placeholder="What should we improve?"></textarea>
+        </label>
+        <div class="dialog-actions">
+          <button type="button" class="secondary-button" id="skip-survey">Not now</button>
+          <button type="submit" class="primary-button compact" id="submit-survey">Send feedback</button>
         </div>
       </form>
     </dialog>
@@ -269,6 +353,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

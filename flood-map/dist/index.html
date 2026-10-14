@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#082f5b" />
     <meta
       name="description"
       content="A community flood observations map for Melbourne CBD."
@@ -29,7 +30,7 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
-    <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./style.css?v=20261014-mobile2" />
   </head>
   <body>
     <header class="site-header">
@@ -92,16 +93,30 @@
         </div>
 
         <div class="legend" id="legend">
-          <strong>Reported incident density</strong>
-          <div class="legend-gradient" aria-hidden="true"></div>
-          <div class="legend-labels"><span>Fewer</span><span>More</span></div>
-          <div class="severity-key" aria-label="Report impact colours">
-            <span><i class="severity-dot severity-low"></i>Low</span>
-            <span><i class="severity-dot severity-moderate"></i>Moderate</span>
-            <span><i class="severity-dot severity-high"></i>High</span>
+          <div class="legend-heading">
+            <strong>Reported incident density</strong>
+            <button
+              type="button"
+              class="legend-toggle"
+              id="legend-toggle"
+              aria-expanded="true"
+              aria-controls="legend-content"
+            >
+              <span id="legend-toggle-label">Hide key</span>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 8 5 5 5-5"></path></svg>
+            </button>
           </div>
-          <small>No reports does not mean no risk.</small>
-          <small class="boundary-key"><i></i>Outside the indicative catchment is greyed out.</small>
+          <div class="legend-content" id="legend-content">
+            <div class="legend-gradient" aria-hidden="true"></div>
+            <div class="legend-labels"><span>Fewer</span><span>More</span></div>
+            <div class="severity-key" aria-label="Report impact colours">
+              <span><i class="severity-dot severity-low"></i>Low</span>
+              <span><i class="severity-dot severity-moderate"></i>Moderate</span>
+              <span><i class="severity-dot severity-high"></i>High</span>
+            </div>
+            <small>No reports does not mean no risk.</small>
+            <small class="boundary-key"><i></i>Outside the indicative catchment is greyed out.</small>
+          </div>
         </div>
 
         <div class="map-summary" aria-live="polite">
@@ -176,7 +191,7 @@
 
         <button class="primary-button" id="report-button">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-          Report an observation
+          <span>Report an observation</span>
         </button>
 
         <section class="safety-note" aria-labelledby="safety-title">
@@ -275,7 +290,12 @@
         </label>
         <div class="photo-field">
           <label for="observation-photo">Photo evidence <span>(optional)</span></label>
-          <input id="observation-photo" type="file" accept="image/jpeg,image/png,image/webp" />
+          <input
+            id="observation-photo"
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            capture="environment"
+          />
           <p class="form-help">JPG, PNG or WebP, up to 5 MB.</p>
           <p class="field-error" id="photo-error" role="alert" hidden></p>
           <div class="photo-preview" id="photo-preview" hidden>
@@ -354,6 +374,6 @@
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="./app.js"></script>
+    <script src="./app.js?v=20261014-mobile2"></script>
   </body>
 </html>

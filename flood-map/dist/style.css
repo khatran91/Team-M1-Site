@@ -20,6 +20,8 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -41,6 +43,13 @@ textarea {
 button,
 select {
   cursor: pointer;
+}
+
+button,
+a,
+select,
+input[type="file"] {
+  touch-action: manipulation;
 }
 
 button:focus-visible,
@@ -377,10 +386,42 @@ textarea:focus-visible {
   box-shadow: 0 10px 24px rgba(8, 47, 91, 0.1);
 }
 
-.legend strong {
+.legend-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.legend-heading strong {
   display: block;
-  margin-bottom: 10px;
   font-size: 0.95rem;
+}
+
+.legend-toggle {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 5px 7px;
+  color: var(--teal-dark);
+  background: #edf8fa;
+  border: 1px solid #c6e2e9;
+  border-radius: 8px;
+  font-size: 0.74rem;
+  font-weight: 850;
+}
+
+.legend-toggle svg {
+  width: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  transition: transform 160ms ease;
+}
+
+.legend-content {
+  margin-top: 10px;
 }
 
 .legend-gradient {
@@ -996,6 +1037,7 @@ dialog {
   border-radius: 18px;
   box-shadow: 0 30px 80px rgba(4, 36, 68, 0.3);
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 dialog::backdrop {
@@ -1310,7 +1352,8 @@ dialog legend {
   }
 
   .map-shell {
-    min-height: 66dvh;
+    height: min(720px, calc(100svh - 150px));
+    min-height: 520px;
   }
 
   .details-panel {
@@ -1325,7 +1368,56 @@ dialog legend {
 }
 
 @media (max-width: 620px) {
+  body {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+
+  .site-header {
+    gap: 10px;
+    padding: 11px 12px 12px;
+  }
+
+  .brand {
+    gap: 9px;
+    font-size: 1.16rem;
+    line-height: 1.05;
+  }
+
+  .brand-mark {
+    width: 38px;
+  }
+
+  .search {
+    height: 52px;
+    padding-left: 13px;
+  }
+
+  .search > button {
+    min-height: 40px;
+  }
+
+  .search-results {
+    max-height: 48dvh;
+    overflow-y: auto;
+  }
+
+  .workspace {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .map-shell {
+    height: calc(100svh - 146px);
+    min-height: 510px;
+    max-height: 690px;
+    border-radius: 12px;
+  }
+
   .map-toolbar {
+    top: 10px;
+    right: 10px;
+    left: 10px;
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
@@ -1350,16 +1442,43 @@ dialog legend {
   }
 
   .map-instruction {
-    top: 132px;
+    top: 126px;
     max-width: calc(100% - 78px);
     border-radius: 10px;
     text-align: center;
   }
 
   .legend {
-    width: 226px;
+    width: min(226px, calc(100% - 20px));
     left: 10px;
-    bottom: 10px;
+    bottom: 72px;
+    padding: 10px 12px;
+    transition: width 160ms ease;
+  }
+
+  .legend-toggle {
+    display: inline-flex;
+  }
+
+  .legend.is-collapsed {
+    width: auto;
+    max-width: calc(100% - 20px);
+  }
+
+  .legend.is-collapsed .legend-content {
+    display: none;
+  }
+
+  .legend.is-collapsed .legend-toggle svg {
+    transform: rotate(180deg);
+  }
+
+  .legend-heading strong {
+    font-size: 0.86rem;
+  }
+
+  .legend-content {
+    margin-top: 9px;
   }
 
   .map-summary {
@@ -1367,7 +1486,39 @@ dialog legend {
   }
 
   .details-panel {
+    gap: 12px;
+    padding: 15px 13px;
+    border-radius: 12px;
+  }
+
+  .area-heading h1 {
+    font-size: 1.8rem;
+  }
+
+  .report-card {
     padding: 15px;
+  }
+
+  .evidence-visual {
+    min-height: 124px;
+    padding: 18px;
+  }
+
+  .report-photo img {
+    height: 180px;
+  }
+
+  #report-button {
+    position: fixed;
+    z-index: 1250;
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: auto;
+    min-height: 54px;
+    padding: 12px 18px;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    border-radius: 999px;
+    box-shadow: 0 14px 34px rgba(8, 47, 91, 0.32);
   }
 
   .card-actions,
@@ -1382,6 +1533,89 @@ dialog legend {
 
   .dialog-actions button {
     width: 100% !important;
+  }
+
+  dialog {
+    width: 100%;
+    max-width: none;
+    max-height: calc(100dvh - 8px);
+    margin: auto 0 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  dialog form {
+    gap: 15px;
+    padding: 19px 16px calc(19px + env(safe-area-inset-bottom));
+  }
+
+  .dialog-heading {
+    align-items: flex-start;
+  }
+
+  .dialog-heading h2 {
+    font-size: 1.4rem;
+  }
+
+  .icon-button {
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+  }
+
+  dialog input,
+  dialog select,
+  dialog textarea {
+    min-height: 48px;
+    font-size: 16px;
+  }
+
+  .field-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .rating-options {
+    gap: 5px;
+  }
+
+  .rating-options label {
+    min-height: 46px;
+    padding: 6px 3px;
+  }
+
+  .photo-preview img {
+    max-height: 180px;
+  }
+
+  footer {
+    padding-bottom: 18px;
+  }
+
+  .leaflet-control-attribution {
+    max-width: 210px;
+    overflow: hidden;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand {
+    font-size: 1.06rem;
+  }
+
+  .brand-mark {
+    width: 34px;
+  }
+
+  #report-button span {
+    font-size: 0.92rem;
+  }
+
+  .card-actions {
+    gap: 8px;
   }
 }
 

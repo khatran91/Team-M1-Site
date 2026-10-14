@@ -387,6 +387,8 @@ const ui = {
   summary: document.querySelector("#map-summary-text"),
   periodSelect: document.querySelector("#period-select"),
   legend: document.querySelector("#legend"),
+  legendToggle: document.querySelector("#legend-toggle"),
+  legendToggleLabel: document.querySelector("#legend-toggle-label"),
   evidence: document.querySelector("#evidence-details"),
   evidenceButton: document.querySelector("#evidence-button"),
   evidenceVisual: document.querySelector("#evidence-visual"),
@@ -442,6 +444,32 @@ let reportLocationRequestId = 0;
 let pinnedReportLocation = null;
 let lastNominatimRequestAt = 0;
 let nominatimQueue = Promise.resolve();
+
+const mobileLegendQuery = window.matchMedia("(max-width: 620px)");
+
+function setLegendExpanded(expanded) {
+  ui.legend.classList.toggle("is-collapsed", !expanded);
+  ui.legendToggle.setAttribute("aria-expanded", String(expanded));
+  ui.legendToggleLabel.textContent = expanded ? "Hide key" : "Show key";
+}
+
+setLegendExpanded(!mobileLegendQuery.matches);
+
+ui.legendToggle.addEventListener("click", () => {
+  setLegendExpanded(ui.legend.classList.contains("is-collapsed"));
+});
+
+const syncLegendForViewport = (event) => setLegendExpanded(!event.matches);
+if (typeof mobileLegendQuery.addEventListener === "function") {
+  mobileLegendQuery.addEventListener("change", syncLegendForViewport);
+} else {
+  mobileLegendQuery.addListener(syncLegendForViewport);
+}
+
+if (typeof ResizeObserver === "function") {
+  const mapResizeObserver = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+  mapResizeObserver.observe(document.querySelector("#map"));
+}
 
 function rainfallDisplay(rainfall) {
   if (!rainfall || rainfall.available === false) {

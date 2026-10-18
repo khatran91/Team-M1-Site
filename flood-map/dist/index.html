@@ -30,7 +30,7 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
-    <link rel="stylesheet" href="./style.css?v=20261019-wsud1" />
+    <link rel="stylesheet" href="./style.css?v=20261019-wsud2" />
   </head>
   <body>
     <header class="site-header">
@@ -303,6 +303,18 @@
               <label><input type="radio" name="solution-preference" value="rain-garden" required /> Rain garden</label>
               <label><input type="radio" name="solution-preference" value="permeable-pavement" /> Permeable pavement</label>
               <label><input type="radio" name="solution-preference" value="tree-pit" /> Stormwater tree pit</label>
+              <label><input type="radio" name="solution-preference" value="other" /> Other</label>
+              <div class="solution-other-field" id="solution-other-field" hidden>
+                <label for="solution-other-text">Describe the solution you would put here</label>
+                <input
+                  type="text"
+                  id="solution-other-text"
+                  maxlength="120"
+                  autocomplete="off"
+                  placeholder="For example: a green roof or water tank"
+                />
+                <span>Maximum 120 characters.</span>
+              </div>
               <label><input type="radio" name="solution-preference" value="not-sure" /> Not sure</label>
             </fieldset>
             <button type="submit" class="secondary-button">Save preference</button>
@@ -492,6 +504,6 @@
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="./app.js?v=20261019-wsud1"></script>
+    <script src="./app.js?v=20261019-wsud2"></script>
   </body>
 </html>

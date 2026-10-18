@@ -111,7 +111,7 @@ Team-M1-Site/
 - **Flood Reports** and **Potential Solutions** tabs for the selected location.
 - Three consistent WSUD options across the catchment: rain gardens, permeable pavement and stormwater tree pits.
 - Location-sensitive recommendation ordering for upstream, central and downstream parts of the catchment.
-- A local preference question asking which solution the visitor would put at the selected location.
+- A local preference question asking which solution the visitor would put at the selected location, including an **Other** option with a short custom response.
 - Original illustrative thumbnails for each WSUD solution.
 - Expanded observation categories and a report form that can be dismissed with Close, Cancel, Escape, or a backdrop click.
 - Required severity selection on new reports, which controls the yellow, orange, or red pin colour.

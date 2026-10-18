@@ -948,6 +948,42 @@ textarea:focus-visible {
   accent-color: var(--teal-dark);
 }
 
+.solution-other-field {
+  display: grid;
+  gap: 6px;
+  margin: -3px 0 2px 28px;
+  padding: 11px;
+  background: var(--mist);
+  border: 1px solid #cbd9e4;
+  border-radius: 9px;
+}
+
+.solution-other-field[hidden] {
+  display: none;
+}
+
+.solution-other-field label {
+  min-height: 0;
+  color: var(--navy);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.solution-other-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 11px;
+  color: var(--navy);
+  background: #fff;
+  border: 1.5px solid #aebfd0;
+  border-radius: 8px;
+}
+
+.solution-other-field span {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .solution-preference .secondary-button {
   width: fit-content;
   min-height: 42px;

@@ -449,6 +449,8 @@ const ui = {
   nearbyDataNote: document.querySelector("#nearby-data-note"),
   solutionPreferenceForm: document.querySelector("#solution-preference-form"),
   solutionPreferenceStatus: document.querySelector("#solution-preference-status"),
+  solutionOtherField: document.querySelector("#solution-other-field"),
+  solutionOtherText: document.querySelector("#solution-other-text"),
 };
 
 let selectedReportId = 2;
@@ -466,6 +468,7 @@ let selectedSolutionLocation = {
   lng: reports[1].lng,
   label: reports[1].location,
 };
+let solutionPreferenceDirty = false;
 
 const mobileLegendQuery = window.matchMedia("(max-width: 620px)");
 
@@ -583,9 +586,19 @@ function restoreSolutionPreference() {
   radios.forEach((radio) => {
     radio.checked = Boolean(saved && radio.value === saved.value);
   });
+  ui.solutionOtherText.value = saved?.value === "other" ? saved.otherText || "" : "";
+  syncOtherSolutionField();
   ui.solutionPreferenceStatus.textContent = saved
     ? `Saved on this device for ${saved.label}.`
     : "";
+}
+
+function syncOtherSolutionField() {
+  const selected = ui.solutionPreferenceForm.querySelector('input[name="solution-preference"]:checked');
+  const showOther = selected?.value === "other";
+  ui.solutionOtherField.hidden = !showOther;
+  ui.solutionOtherText.required = showOther;
+  if (!showOther) ui.solutionOtherText.setCustomValidity("");
 }
 
 function renderSolutionRecommendations(location = selectedSolutionLocation) {
@@ -614,16 +627,18 @@ function renderSolutionRecommendations(location = selectedSolutionLocation) {
   } else {
     ui.nearbyDataNote.textContent = "City of Melbourne opportunity data will be checked when available; the current ranking uses catchment position.";
   }
-  restoreSolutionPreference();
+  if (!solutionPreferenceDirty) restoreSolutionPreference();
 }
 
 function setSolutionLocation(lat, lng, label) {
   if (!isInsideCatchment(Number(lat), Number(lng))) return false;
+  const previousKey = solutionLocationKey();
   selectedSolutionLocation = {
     lat: Number(lat),
     lng: Number(lng),
     label: label || `Selected point (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`,
   };
+  if (solutionLocationKey() !== previousKey) solutionPreferenceDirty = false;
   renderSolutionRecommendations(selectedSolutionLocation);
   return true;
 }
@@ -730,18 +745,38 @@ document.querySelectorAll("[data-detail-view]").forEach((tab) => {
   tab.addEventListener("click", () => setDetailView(tab.dataset.detailView));
 });
 
+ui.solutionPreferenceForm.addEventListener("change", (event) => {
+  if (event.target.matches('input[name="solution-preference"]')) {
+    solutionPreferenceDirty = true;
+    syncOtherSolutionField();
+    if (event.target.value === "other") {
+      window.setTimeout(() => ui.solutionOtherText.focus(), 0);
+    }
+  }
+});
+
+ui.solutionOtherText.addEventListener("input", () => {
+  if (ui.solutionOtherText.value.trim()) ui.solutionOtherText.setCustomValidity("");
+});
+
 ui.solutionPreferenceForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  if (!ui.solutionPreferenceForm.reportValidity()) return;
   const value = new FormData(ui.solutionPreferenceForm).get("solution-preference");
+  const otherText = value === "other" ? ui.solutionOtherText.value.trim() : "";
+  ui.solutionOtherText.setCustomValidity(
+    value === "other" && !otherText ? "Describe the other solution you would put here." : "",
+  );
+  if (!ui.solutionPreferenceForm.reportValidity()) return;
   const preferences = readWsudPreferences();
   preferences[solutionLocationKey()] = {
     value,
+    otherText,
     label: selectedSolutionLocation.label,
     lat: selectedSolutionLocation.lat,
     lng: selectedSolutionLocation.lng,
     submittedAt: new Date().toISOString(),
   };
+  solutionPreferenceDirty = false;
   try {
     localStorage.setItem(wsudPreferenceStorageKey, JSON.stringify(preferences));
     ui.solutionPreferenceStatus.textContent = `Saved on this device for ${selectedSolutionLocation.label}.`;

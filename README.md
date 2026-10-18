@@ -1,6 +1,6 @@
 # Team M1 — Melbourne Community Flood Map
 
-A responsive flood-observation map for the Elizabeth Street catchment. The prototype uses sample community reports to demonstrate hotspots, exact map-pin reporting, report updates, live rainfall context, location search, and a guided observation form.
+A responsive flood-observation and WSUD exploration map for the Elizabeth Street catchment. The prototype uses sample community reports to demonstrate hotspots, exact map-pin reporting, report updates, live rainfall context, location search, ranked potential solutions, and community solution preferences.
 
 > This prototype displays sample community observations. It is not a flood forecast or emergency service.
 
@@ -18,7 +18,7 @@ You only need:
 
 - **Python 3** to run a local web server.
 - A modern browser such as Chrome, Edge, Firefox, or Safari.
-- An internet connection while using the map. Leaflet and its marker-clustering plugin are loaded from a CDN, map tiles come from OpenStreetMap, location search uses Nominatim, and rainfall context uses Open-Meteo.
+- An internet connection while using the map. Leaflet and its marker-clustering plugin are loaded from a CDN, map tiles come from OpenStreetMap, location search uses Nominatim, rainfall context uses Open-Meteo, and the WSUD opportunity layer uses the City of Melbourne Open Data API.
 
 You do **not** need Node.js, npm, a database, or an API key.
 
@@ -85,7 +85,8 @@ Team-M1-Site/
 │   ├── dist/
 │   │   ├── index.html    # Page structure and content
 │   │   ├── style.css     # Layout, colours, and responsive styles
-│   │   └── app.js        # Map data and interactions
+│   │   ├── app.js        # Map data and interactions
+│   │   └── assets/       # QR code and WSUD example illustrations
 │   └── .openai/
 │       └── hosting.json  # Hosting configuration
 └── README.md
@@ -104,8 +105,14 @@ Team-M1-Site/
 - Cluster nearby report pins so concentrated observations remain readable.
 - Sample flood hotspots and numbered incident markers.
 - Recent reports and past hotspots views.
+- A third **WSUD opportunities** map view using the City of Melbourne's mapped laneway opportunity data.
 - Time-period selector.
 - Incident detail panel.
+- **Flood Reports** and **Potential Solutions** tabs for the selected location.
+- Three consistent WSUD options across the catchment: rain gardens, permeable pavement and stormwater tree pits.
+- Location-sensitive recommendation ordering for upstream, central and downstream parts of the catchment.
+- A local preference question asking which solution the visitor would put at the selected location.
+- Original illustrative thumbnails for each WSUD solution.
 - Expanded observation categories and a report form that can be dismissed with Close, Cancel, Escape, or a backdrop click.
 - Required severity selection on new reports, which controls the yellow, orange, or red pin colour.
 - Required observed-depth selection using below or at/above a typical 150 mm kerb reference; rainfall is not used to infer floodwater depth.
@@ -121,14 +128,18 @@ Team-M1-Site/
 - New observations and attached photos are temporary and disappear when the page is refreshed.
 - Reports are currently stored only in each visitor's browser session, so they are not shared with other visitors.
 - Community updates and survey responses are stored only in that browser's local storage; they are not sent to a shared database.
+- WSUD solution preferences are stored only in that browser's local storage; they are not shared between visitors.
 - Location search and address lookup depend on the public OpenStreetMap Nominatim service.
 - Rainfall is model data from Open-Meteo, not an on-site rain gauge, and may be unavailable. It is shown as context only and is never used to estimate water depth.
+- WSUD rankings use the selected point's upstream, central or downstream position as a transparent prototype rule. They are engagement prompts, not site assessments, engineering designs or approvals.
+- The City of Melbourne laneway layer supplies nearby WSUD context but does not determine which specific solution is feasible. The site falls back to indicative catchment zones if the live dataset is unavailable.
 - The catchment outline is an indicative concept tracing from the published plan, not a survey-grade GIS boundary. Replace it with an authoritative GeoJSON boundary before operational use.
 - The map should not be used for emergency decisions or as an official flood warning.
 
 ## Data sources and assumptions
 
 - Catchment extent: [City of Melbourne — Elizabeth Street Catchment Integrated Water Cycle Management Plan 2015](https://mvga-prod-files.s3.ap-southeast-4.amazonaws.com/public/2024-05/elizabeth-street-catchment-plan.pdf). The prototype boundary is an indicative tracing of the published map.
+- WSUD opportunity overlay: [City of Melbourne — Laneways with greening potential](https://data.melbourne.vic.gov.au/explore/dataset/laneways-with-greening-potential/information/). The prototype reads its published geometry and `wsud` suitability field through the portal's public API.
 - Rainfall: [Open-Meteo Weather Forecast API](https://open-meteo.com/en/docs). The site sums modelled hourly precipitation from midnight to the report time, then compares it with the previous 30 days over the same elapsed hours.
 - Typical kerb reference: 150 mm, based on the project team's stated 125–175 mm bluestone kerb range. The reporter chooses below or at/above this reference; the site does not infer water depth from rainfall.
 
@@ -145,7 +156,7 @@ If a change does not appear, perform a hard refresh:
 
 ### The map is blank
 
-Check your internet connection. The page needs access to `unpkg.com`, `tile.openstreetmap.org`, `nominatim.openstreetmap.org`, and `api.open-meteo.com`.
+Check your internet connection. The page needs access to `unpkg.com`, `tile.openstreetmap.org`, `nominatim.openstreetmap.org`, `api.open-meteo.com`, and `data.melbourne.vic.gov.au`.
 
 ### The terminal says the port is already in use
 

@@ -119,6 +119,8 @@ const allowedPhotoTypes = ["image/jpeg", "image/png", "image/webp"];
 const updateStorageKey = "melbourneFloodMapUpdatesV2";
 const surveyStorageKey = "melbourneFloodMapSurveyV2";
 const surveySkippedKey = "melbourneFloodMapSurveySkippedThisSessionV2";
+const wsudPreferenceStorageKey = "melbourneFloodMapWsudPreferencesV1";
+const wsudDatasetUrl = "https://data.melbourne.vic.gov.au/api/explore/v2.1/catalog/datasets/laneways-with-greening-potential/exports/geojson?lang=en&timezone=Australia%2FMelbourne";
 const surveyLaunchAt = new Date("2026-10-10T00:00:00+11:00");
 const surveyEndAt = new Date("2026-11-10T23:59:59+11:00");
 const observationTypes = [
@@ -288,8 +290,11 @@ const markerLayer = typeof L.markerClusterGroup === "function"
     }).addTo(map)
   : L.layerGroup().addTo(map);
 const heatLayer = L.layerGroup().addTo(map);
+const wsudLayer = L.layerGroup();
 let selectedLocationMarker = null;
 let lastSelectedLocation = null;
+let wsudFeatures = [];
+let wsudLoadPromise = null;
 
 function severityClass(severity) {
   const value = String(severity || "").toLowerCase();
@@ -386,9 +391,13 @@ const ui = {
   depth: document.querySelector("#report-depth"),
   summary: document.querySelector("#map-summary-text"),
   periodSelect: document.querySelector("#period-select"),
+  periodControl: document.querySelector("#period-control"),
   legend: document.querySelector("#legend"),
+  wsudLegend: document.querySelector("#wsud-legend"),
+  wsudDataStatus: document.querySelector("#wsud-data-status"),
   legendToggle: document.querySelector("#legend-toggle"),
   legendToggleLabel: document.querySelector("#legend-toggle-label"),
+  mapInstructionText: document.querySelector("#map-instruction-text"),
   evidence: document.querySelector("#evidence-details"),
   evidenceButton: document.querySelector("#evidence-button"),
   evidenceVisual: document.querySelector("#evidence-visual"),
@@ -432,6 +441,14 @@ const ui = {
   surveyDialog: document.querySelector("#survey-dialog"),
   surveyForm: document.querySelector("#survey-form"),
   surveyComment: document.querySelector("#survey-comment"),
+  floodReportPanel: document.querySelector("#flood-report-panel"),
+  solutionsPanel: document.querySelector("#solutions-panel"),
+  solutionList: document.querySelector("#solution-list"),
+  solutionZoneLabel: document.querySelector("#solution-zone-label"),
+  solutionCharacteristics: document.querySelector("#solution-characteristics"),
+  nearbyDataNote: document.querySelector("#nearby-data-note"),
+  solutionPreferenceForm: document.querySelector("#solution-preference-form"),
+  solutionPreferenceStatus: document.querySelector("#solution-preference-status"),
 };
 
 let selectedReportId = 2;
@@ -444,6 +461,11 @@ let reportLocationRequestId = 0;
 let pinnedReportLocation = null;
 let lastNominatimRequestAt = 0;
 let nominatimQueue = Promise.resolve();
+let selectedSolutionLocation = {
+  lat: reports[1].lat,
+  lng: reports[1].lng,
+  label: reports[1].location,
+};
 
 const mobileLegendQuery = window.matchMedia("(max-width: 620px)");
 
@@ -470,6 +492,264 @@ if (typeof ResizeObserver === "function") {
   const mapResizeObserver = new ResizeObserver(() => map.invalidateSize({ pan: false }));
   mapResizeObserver.observe(document.querySelector("#map"));
 }
+
+const wsudProfiles = {
+  upstream: {
+    label: "Upstream catchment",
+    characteristics: "More opportunities to intercept runoff near its source, with some wider verges and planting interfaces.",
+    order: ["rain-garden", "tree-pit", "permeable-pavement"],
+    reasons: {
+      "rain-garden": "Recommended first where wider planting space can slow and filter runoff.",
+      "tree-pit": "A distributed option for kerbside capture and added tree canopy.",
+      "permeable-pavement": "Useful on suitable paved areas after checking soil and underground services.",
+    },
+  },
+  central: {
+    label: "Central catchment",
+    characteristics: "Dense mixed-use streets and laneways create tighter surface-space and access constraints.",
+    order: ["tree-pit", "permeable-pavement", "rain-garden"],
+    reasons: {
+      "tree-pit": "Recommended first as a compact kerbside intervention where space permits.",
+      "permeable-pavement": "Can use existing paved areas, subject to loading, soil and service checks.",
+      "rain-garden": "Still valuable where a larger verge, median or corner space can be found.",
+    },
+  },
+  downstream: {
+    label: "Downstream catchment",
+    characteristics: "Highly paved streets near the catchment outlet favour distributed treatments with a smaller surface footprint.",
+    order: ["permeable-pavement", "tree-pit", "rain-garden"],
+    reasons: {
+      "permeable-pavement": "Recommended first for dense paved areas where planting space is limited.",
+      "tree-pit": "Can capture local runoff while adding shade along suitable kerb alignments.",
+      "rain-garden": "Best reserved for sites with enough footprint and safe overflow routing.",
+    },
+  },
+};
+
+function catchmentProfileFor(lat) {
+  const north = catchmentBounds.getNorth();
+  const south = catchmentBounds.getSouth();
+  const progressDownstream = Math.max(0, Math.min(1, (north - Number(lat)) / (north - south)));
+  if (progressDownstream < 0.4) return "upstream";
+  if (progressDownstream < 0.72) return "central";
+  return "downstream";
+}
+
+function readWsudPreferences() {
+  try {
+    return JSON.parse(localStorage.getItem(wsudPreferenceStorageKey) || "{}") || {};
+  } catch (_error) {
+    return {};
+  }
+}
+
+function solutionLocationKey(location = selectedSolutionLocation) {
+  return `${Number(location.lat).toFixed(4)},${Number(location.lng).toFixed(4)}`;
+}
+
+function distanceMeters(latA, lngA, latB, lngB) {
+  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+  const earthRadius = 6371000;
+  const deltaLat = toRadians(latB - latA);
+  const deltaLng = toRadians(lngB - lngA);
+  const a =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(toRadians(latA)) * Math.cos(toRadians(latB)) * Math.sin(deltaLng / 2) ** 2;
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function featurePoint(feature) {
+  const point = feature?.properties?.geo_point_2d;
+  if (!point) return null;
+  const lat = Number(point.lat ?? point[0]);
+  const lng = Number(point.lon ?? point[1]);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+}
+
+function nearestWsudFeature(lat, lng) {
+  return wsudFeatures.reduce((nearest, feature) => {
+    const point = featurePoint(feature);
+    if (!point) return nearest;
+    const distance = distanceMeters(lat, lng, point.lat, point.lng);
+    if (!nearest || distance < nearest.distance) return { feature, distance };
+    return nearest;
+  }, null);
+}
+
+function restoreSolutionPreference() {
+  const preferences = readWsudPreferences();
+  const saved = preferences[solutionLocationKey()];
+  const radios = ui.solutionPreferenceForm.querySelectorAll('input[name="solution-preference"]');
+  radios.forEach((radio) => {
+    radio.checked = Boolean(saved && radio.value === saved.value);
+  });
+  ui.solutionPreferenceStatus.textContent = saved
+    ? `Saved on this device for ${saved.label}.`
+    : "";
+}
+
+function renderSolutionRecommendations(location = selectedSolutionLocation) {
+  const profileKey = catchmentProfileFor(location.lat);
+  const profile = wsudProfiles[profileKey];
+  ui.solutionZoneLabel.textContent = profile.label;
+  ui.solutionCharacteristics.textContent = profile.characteristics;
+
+  profile.order.forEach((solutionId, index) => {
+    const card = ui.solutionList.querySelector(`[data-solution="${solutionId}"]`);
+    if (!card) return;
+    card.querySelector(".solution-rank").textContent = String(index + 1);
+    card.querySelector(".solution-rank").setAttribute("aria-label", `Recommendation rank ${index + 1}`);
+    card.querySelector(".solution-reason").textContent = profile.reasons[solutionId];
+    ui.solutionList.append(card);
+  });
+
+  const nearby = nearestWsudFeature(location.lat, location.lng);
+  if (nearby && nearby.distance <= 300) {
+    const properties = nearby.feature.properties || {};
+    const name = properties.mapbase_1 || "A nearby mapped laneway";
+    const suitability = properties.wsud || "Requires assessment";
+    ui.nearbyDataNote.textContent = `City of Melbourne open data: ${name}, about ${Math.round(nearby.distance)} m away, is marked “${suitability}” for WSUD. This informs context, not approval.`;
+  } else if (wsudFeatures.length) {
+    ui.nearbyDataNote.textContent = "City of Melbourne open data: no mapped laneway record was found within 300 m of this point. The catchment-position ranking is shown instead.";
+  } else {
+    ui.nearbyDataNote.textContent = "City of Melbourne opportunity data will be checked when available; the current ranking uses catchment position.";
+  }
+  restoreSolutionPreference();
+}
+
+function setSolutionLocation(lat, lng, label) {
+  if (!isInsideCatchment(Number(lat), Number(lng))) return false;
+  selectedSolutionLocation = {
+    lat: Number(lat),
+    lng: Number(lng),
+    label: label || `Selected point (${Number(lat).toFixed(5)}, ${Number(lng).toFixed(5)})`,
+  };
+  renderSolutionRecommendations(selectedSolutionLocation);
+  return true;
+}
+
+function setDetailView(view) {
+  const showSolutions = view === "solutions";
+  ui.floodReportPanel.hidden = showSolutions;
+  ui.solutionsPanel.hidden = !showSolutions;
+  document.querySelectorAll("[data-detail-view]").forEach((tab) => {
+    const active = tab.dataset.detailView === view;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+  });
+  if (showSolutions) renderSolutionRecommendations();
+}
+
+function wsudFeaturePopup(feature) {
+  const properties = feature.properties || {};
+  const wrapper = document.createElement("div");
+  const title = document.createElement("strong");
+  const status = document.createElement("p");
+  title.textContent = properties.mapbase_1 || "Mapped laneway";
+  status.textContent = `City of Melbourne WSUD field: ${properties.wsud || "Further assessment"}`;
+  status.style.margin = "5px 0 0";
+  wrapper.append(title, status);
+  return wrapper;
+}
+
+function renderWsudFallback() {
+  wsudLayer.clearLayers();
+  [
+    { lat: -37.7992, lng: 144.9613, label: "Upstream concept area", radius: 170 },
+    { lat: -37.8118, lng: 144.9627, label: "Central concept area", radius: 145 },
+    { lat: -37.8181, lng: 144.9645, label: "Downstream concept area", radius: 130 },
+  ].forEach((area) => {
+    L.circle([area.lat, area.lng], {
+      radius: area.radius,
+      color: "#087b54",
+      weight: 2,
+      dashArray: "6 5",
+      fillColor: "#68c796",
+      fillOpacity: 0.22,
+    }).bindTooltip(area.label).addTo(wsudLayer);
+  });
+  ui.wsudDataStatus.textContent = "Live dataset unavailable — showing indicative catchment zones.";
+  ui.summary.textContent = "3 indicative WSUD zones shown";
+  renderSolutionRecommendations();
+}
+
+function renderWsudFeatures(features) {
+  wsudLayer.clearLayers();
+  wsudFeatures = features.filter((feature) => {
+    const point = featurePoint(feature);
+    return point && isInsideCatchment(point.lat, point.lng);
+  });
+
+  L.geoJSON({ type: "FeatureCollection", features: wsudFeatures }, {
+    style(feature) {
+      const consider = String(feature?.properties?.wsud || "").toLowerCase() === "consider";
+      return {
+        color: consider ? "#087b54" : "#bc7415",
+        weight: consider ? 2.2 : 1.2,
+        opacity: consider ? 0.95 : 0.65,
+        fillColor: consider ? "#49bd82" : "#f3b54a",
+        fillOpacity: consider ? 0.42 : 0.16,
+      };
+    },
+    onEachFeature(feature, layer) {
+      layer.bindPopup(wsudFeaturePopup(feature));
+    },
+  }).addTo(wsudLayer);
+
+  const considered = wsudFeatures.filter(
+    (feature) => String(feature?.properties?.wsud || "").toLowerCase() === "consider",
+  ).length;
+  ui.wsudDataStatus.textContent = `${wsudFeatures.length} mapped catchment laneway areas · ${considered} marked “Consider”.`;
+  ui.summary.textContent = `${considered} WSUD opportunities · City of Melbourne data`;
+  renderSolutionRecommendations();
+}
+
+function loadWsudOpportunities() {
+  if (wsudLoadPromise) return wsudLoadPromise;
+  ui.wsudDataStatus.textContent = "Loading City of Melbourne open data…";
+  ui.summary.textContent = "Loading WSUD opportunities…";
+  wsudLoadPromise = fetch(wsudDatasetUrl, { headers: { Accept: "application/geo+json, application/json" } })
+    .then((response) => {
+      if (!response.ok) throw new Error(`City data service returned ${response.status}`);
+      return response.json();
+    })
+    .then((data) => {
+      if (!Array.isArray(data?.features)) throw new Error("City data response did not include map features");
+      renderWsudFeatures(data.features);
+      return wsudFeatures;
+    })
+    .catch(() => {
+      wsudFeatures = [];
+      renderWsudFallback();
+      return [];
+    });
+  return wsudLoadPromise;
+}
+
+document.querySelectorAll("[data-detail-view]").forEach((tab) => {
+  tab.addEventListener("click", () => setDetailView(tab.dataset.detailView));
+});
+
+ui.solutionPreferenceForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (!ui.solutionPreferenceForm.reportValidity()) return;
+  const value = new FormData(ui.solutionPreferenceForm).get("solution-preference");
+  const preferences = readWsudPreferences();
+  preferences[solutionLocationKey()] = {
+    value,
+    label: selectedSolutionLocation.label,
+    lat: selectedSolutionLocation.lat,
+    lng: selectedSolutionLocation.lng,
+    submittedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(wsudPreferenceStorageKey, JSON.stringify(preferences));
+    ui.solutionPreferenceStatus.textContent = `Saved on this device for ${selectedSolutionLocation.label}.`;
+    showToast("Solution preference saved for this location.");
+  } catch (_error) {
+    ui.solutionPreferenceStatus.textContent = "Preference noted for this session only.";
+  }
+});
 
 function rainfallDisplay(rainfall) {
   if (!rainfall || rainfall.available === false) {
@@ -554,6 +834,8 @@ function selectReport(id, pan = false) {
   }
 
   renderUpdates(report);
+  setSolutionLocation(report.lat, report.lng, report.location);
+  setDetailView("reports");
   if (pan) map.flyTo([report.lat, report.lng], 16, { duration: 0.6 });
   return true;
 }
@@ -630,6 +912,11 @@ function showNoReportsState() {
 }
 
 function applyPeriodFilter() {
+  if (currentView === "wsud") {
+    markerLayer.clearLayers();
+    heatLayer.clearLayers();
+    return;
+  }
   const visibleReports = reportsForCurrentPeriod();
   markerLayer.clearLayers();
   visibleReports.forEach(addMarker);
@@ -749,8 +1036,14 @@ function choosePlace(place) {
   ui.areaTitle.textContent = "Selected location";
   ui.areaName.textContent = place.label;
   setSelectedLocation(place.lat, place.lng);
+  setSolutionLocation(place.lat, place.lng, place.label);
   map.flyTo([place.lat, place.lng], 17, { duration: 0.7 });
-  showToast("Location found. Click its exact point on the map, or use Report an observation.");
+  if (currentView === "wsud") {
+    setDetailView("solutions");
+    showToast("Location found. Review the ranked WSUD options for this point.");
+  } else {
+    showToast("Location found. Click its exact point on the map, or use Report an observation.");
+  }
 }
 
 ui.searchInput.addEventListener("input", () => {
@@ -1024,7 +1317,30 @@ function openObservationDialogAt(lat, lng, initialLabel) {
 }
 
 map.on("click", (event) => {
-  openObservationDialogAt(event.latlng.lat, event.latlng.lng);
+  const { lat, lng } = event.latlng;
+  if (!isInsideCatchment(lat, lng)) {
+    showToast("Choose a location inside the outlined Elizabeth Street catchment.");
+    return;
+  }
+
+  if (currentView === "wsud") {
+    const coordinateLabel = `Selected point (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+    setSelectedLocation(lat, lng);
+    setSolutionLocation(lat, lng, coordinateLabel);
+    ui.areaTitle.textContent = "Around this location";
+    ui.areaName.textContent = coordinateLabel;
+    setDetailView("solutions");
+    showToast("WSUD recommendations updated for the selected point.");
+    void reverseGeocode(lat, lng)
+      .then((label) => {
+        setSolutionLocation(lat, lng, label);
+        ui.areaName.textContent = label;
+      })
+      .catch(() => undefined);
+    return;
+  }
+
+  openObservationDialogAt(lat, lng);
 });
 
 document.querySelector("#report-button").addEventListener("click", () => {
@@ -1210,7 +1526,28 @@ document.querySelectorAll("[data-view]").forEach((tab) => {
       item.classList.toggle("active", active);
       item.setAttribute("aria-selected", String(active));
     });
+
+    const showingWsud = currentView === "wsud";
+    ui.periodControl.hidden = showingWsud;
     ui.legend.hidden = currentView !== "hotspots";
+    ui.wsudLegend.hidden = !showingWsud;
+    ui.mapInstructionText.textContent = showingWsud
+      ? "Select any point inside the catchment to compare potential WSUD solutions"
+      : "Click inside the outlined catchment to report the exact location";
+
+    if (showingWsud) {
+      if (map.hasLayer(markerLayer)) map.removeLayer(markerLayer);
+      heatLayer.clearLayers();
+      if (!map.hasLayer(wsudLayer)) wsudLayer.addTo(map);
+      setDetailView("solutions");
+      void loadWsudOpportunities();
+      applyPeriodFilter();
+      return;
+    }
+
+    if (map.hasLayer(wsudLayer)) map.removeLayer(wsudLayer);
+    if (!map.hasLayer(markerLayer)) markerLayer.addTo(map);
+    setDetailView("reports");
     applyPeriodFilter();
   });
 });

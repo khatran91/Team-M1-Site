@@ -30,7 +30,7 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
-    <link rel="stylesheet" href="./style.css?v=20261014-mobile2" />
+    <link rel="stylesheet" href="./style.css?v=20261019-wsud1" />
   </head>
   <body>
     <header class="site-header">
@@ -72,8 +72,11 @@
             <button id="hotspots-tab" class="active" role="tab" aria-selected="true" data-view="hotspots">
               Past hotspots
             </button>
+            <button id="wsud-tab" role="tab" aria-selected="false" data-view="wsud">
+              WSUD opportunities
+            </button>
           </div>
-          <label class="period-control">
+          <label class="period-control" id="period-control">
             <span class="sr-only">Choose time period</span>
             <select id="period-select">
               <option value="today"> Today</option>
@@ -87,9 +90,9 @@
 
         <div id="map" aria-label="Interactive map of flood observations in the Elizabeth Street catchment"></div>
 
-        <div class="map-instruction">
+        <div class="map-instruction" id="map-instruction">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s6-5.3 6-11a6 6 0 1 0-12 0c0 5.7 6 11 6 11Z"></path><circle cx="12" cy="10" r="2"></circle></svg>
-          Click inside the outlined catchment to report the exact location
+          <span id="map-instruction-text">Click inside the outlined catchment to report the exact location</span>
         </div>
 
         <div class="legend" id="legend">
@@ -119,6 +122,22 @@
           </div>
         </div>
 
+        <div class="legend wsud-legend" id="wsud-legend" hidden>
+          <div class="legend-heading">
+            <strong>WSUD opportunity layer</strong>
+          </div>
+          <div class="legend-content">
+            <div class="wsud-key">
+              <span><i class="wsud-swatch wsud-consider"></i>Consider for WSUD</span>
+              <span><i class="wsud-swatch wsud-review"></i>Further assessment</span>
+            </div>
+            <small id="wsud-data-status">Loading City of Melbourne open data…</small>
+            <small class="wsud-source-link">
+              <a href="https://data.melbourne.vic.gov.au/explore/dataset/laneways-with-greening-potential/information/" target="_blank" rel="noopener">View source dataset</a>
+            </small>
+          </div>
+        </div>
+
         <div class="map-summary" aria-live="polite">
           <span class="status-dot"></span>
           <span id="map-summary-text">3 reports shown · Past 1 year</span>
@@ -131,6 +150,28 @@
           <h1 id="area-title">Around your building</h1>
           <p id="area-name">Elizabeth Street, Melbourne</p>
         </div>
+
+        <div class="detail-tabs" role="tablist" aria-label="Location information">
+          <button
+            type="button"
+            class="active"
+            id="flood-report-detail-tab"
+            role="tab"
+            aria-selected="true"
+            aria-controls="flood-report-panel"
+            data-detail-view="reports"
+          >Flood Reports</button>
+          <button
+            type="button"
+            id="solutions-detail-tab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="solutions-panel"
+            data-detail-view="solutions"
+          >Potential Solutions</button>
+        </div>
+
+        <section id="flood-report-panel" class="detail-panel-content" role="tabpanel" aria-labelledby="flood-report-detail-tab">
 
         <article class="report-card" id="report-card" aria-live="polite">
           <div class="report-heading">
@@ -193,6 +234,83 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
           <span>Report an observation</span>
         </button>
+        </section>
+
+        <section
+          id="solutions-panel"
+          class="detail-panel-content solutions-panel"
+          role="tabpanel"
+          aria-labelledby="solutions-detail-tab"
+          hidden
+        >
+          <div class="solutions-intro">
+            <div class="solutions-heading">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21v-9M12 14c-5 0-7-3-7-7 4 0 7 2 7 7ZM12 11c0-4 3-7 7-7 0 4-2 7-7 7Z"></path></svg>
+              <h2>Potential WSUD solutions</h2>
+            </div>
+            <p>Explore stormwater management options that may suit this location’s characteristics.</p>
+            <p class="preliminary-note">Preliminary examples only — further site assessment is required.</p>
+          </div>
+
+          <div class="solution-context" aria-live="polite">
+            <span id="solution-zone-label">Central catchment</span>
+            <p id="solution-characteristics">Dense mixed-use streets with constrained planting space.</p>
+          </div>
+
+          <div class="solution-list" id="solution-list">
+            <article class="solution-card" data-solution="rain-garden">
+              <img src="./assets/wsud-rain-garden.svg" alt="Illustration of a planted rain garden beside a street" />
+              <div class="solution-card-copy">
+                <div class="solution-title-row">
+                  <h3>Rain garden</h3>
+                  <span class="solution-rank" aria-label="Recommendation rank">1</span>
+                </div>
+                <p>Intercepts and treats road runoff using planted filtration areas.</p>
+                <strong class="solution-reason">Best where wider planting space is available.</strong>
+              </div>
+            </article>
+
+            <article class="solution-card" data-solution="permeable-pavement">
+              <img src="./assets/wsud-permeable-pavement.svg" alt="Illustration of permeable pavement in an urban street" />
+              <div class="solution-card-copy">
+                <div class="solution-title-row">
+                  <h3>Permeable pavement</h3>
+                  <span class="solution-rank" aria-label="Recommendation rank">2</span>
+                </div>
+                <p>Allows rainfall to enter a designed subsurface storage or drainage layer.</p>
+                <strong class="solution-reason">Useful where surface space is constrained.</strong>
+              </div>
+            </article>
+
+            <article class="solution-card" data-solution="tree-pit">
+              <img src="./assets/wsud-tree-pit.svg" alt="Illustration of a stormwater tree pit beside a footpath" />
+              <div class="solution-card-copy">
+                <div class="solution-title-row">
+                  <h3>Stormwater tree pit</h3>
+                  <span class="solution-rank" aria-label="Recommendation rank">3</span>
+                </div>
+                <p>Captures runoff to support vegetation and manage stormwater locally.</p>
+                <strong class="solution-reason">Can fit within selected kerbside locations.</strong>
+              </div>
+            </article>
+          </div>
+
+          <p class="nearby-data-note" id="nearby-data-note">City of Melbourne opportunity data will be checked when available.</p>
+
+          <form class="solution-preference" id="solution-preference-form">
+            <fieldset>
+              <legend>Which solution would you put here?</legend>
+              <label><input type="radio" name="solution-preference" value="rain-garden" required /> Rain garden</label>
+              <label><input type="radio" name="solution-preference" value="permeable-pavement" /> Permeable pavement</label>
+              <label><input type="radio" name="solution-preference" value="tree-pit" /> Stormwater tree pit</label>
+              <label><input type="radio" name="solution-preference" value="not-sure" /> Not sure</label>
+            </fieldset>
+            <button type="submit" class="secondary-button">Save preference</button>
+            <p id="solution-preference-status" class="preference-status" role="status"></p>
+          </form>
+
+          <p class="solutions-disclaimer">Recommendations are indicative community-engagement prompts, not engineering designs or approvals.</p>
+        </section>
 
         <section class="safety-note" aria-labelledby="safety-title">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3.5 6.5v5.8c0 4.6 3.6 7.5 8.5 8.7 4.9-1.2 8.5-4.1 8.5-8.7V6.5z"></path><path d="M8.5 12.2 11 15l4.8-6"></path></svg>
@@ -374,6 +492,6 @@
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="./app.js?v=20261014-mobile2"></script>
+    <script src="./app.js?v=20261019-wsud1"></script>
   </body>
 </html>

@@ -96,14 +96,14 @@ Team-M1-Site/
 
 - Interactive Elizabeth Street catchment map powered by Leaflet and OpenStreetMap.
 - An indicative catchment boundary based on the City of Melbourne's published 2015 catchment plan, with the area outside greyed out.
-- No sign-in is required to view the map or add a temporary report.
+- No sign-in is required to view the map or add a report saved on that device.
 - Search for addresses, buildings and landmarks inside the catchment.
 - Click an exact point inside the catchment to open a pre-filled observation form and record its coordinates.
 - Search and choose from catchment streets and intersections inside the report form.
-- Filter visible reports by today, the past 7 or 30 days, 6 months, or 1 year.
+- Filter visible reports by today, the past 7 or 30 days, 6 months, or 1 year. The default is the past 7 days, including older reports updated during that period.
 - See low-impact pins in yellow, moderate-impact pins in orange, and high-impact pins in red.
 - Cluster nearby report pins so concentrated observations remain readable.
-- Sample flood hotspots and numbered incident markers.
+- Sample flood hotspots and unnumbered, severity-coloured incident markers.
 - Recent reports and past hotspots views.
 - A third **WSUD opportunities** map view using the City of Melbourne's mapped laneway opportunity data.
 - Time-period selector.
@@ -124,10 +124,10 @@ Team-M1-Site/
 
 ## Important prototype limitations
 
-- All flood reports are sample data stored in `flood-map/dist/app.js`.
-- New observations and attached photos are temporary and disappear when the page is refreshed.
-- Reports are currently stored only in each visitor's browser session, so they are not shared with other visitors.
-- Community updates and survey responses are stored only in that browser's local storage; they are not sent to a shared database.
+- The site includes sample reports stored in `flood-map/dist/app.js`; visitor-created reports are stored separately in that visitor's browser.
+- New observations and attached photos are saved in the browser's IndexedDB and survive page refreshes on the same browser and device. A text-only local-storage fallback is used if IndexedDB is unavailable.
+- Reports are not shared with other visitors. Clearing the site's browser data, using private browsing, or changing browser/device can remove or hide locally saved reports.
+- Community updates and survey responses are stored only in that browser; they are not sent to a shared database.
 - WSUD solution preferences are stored only in that browser's local storage; they are not shared between visitors.
 - Location search and address lookup depend on the public OpenStreetMap Nominatim service.
 - Rainfall is model data from Open-Meteo, not an on-site rain gauge, and may be unavailable. It is shown as context only and is never used to estimate water depth.

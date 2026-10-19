@@ -117,6 +117,9 @@ const searchBounds = {
 const maxPhotoBytes = 5 * 1024 * 1024;
 const allowedPhotoTypes = ["image/jpeg", "image/png", "image/webp"];
 const updateStorageKey = "melbourneFloodMapUpdatesV2";
+const reportDatabaseName = "melbourneFloodMapReportsV1";
+const reportStoreName = "reports";
+const reportFallbackStorageKey = "melbourneFloodMapSavedReportsV1";
 const surveyStorageKey = "melbourneFloodMapSurveyV2";
 const surveySkippedKey = "melbourneFloodMapSurveySkippedThisSessionV2";
 const wsudPreferenceStorageKey = "melbourneFloodMapWsudPreferencesV1";
@@ -222,9 +225,19 @@ function readStoredUpdates() {
 }
 
 const storedUpdates = readStoredUpdates();
+
+function mergeReportUpdates(...groups) {
+  const unique = new Map();
+  groups.flat().forEach((update) => {
+    if (!update?.text || !update?.createdAt) return;
+    unique.set(`${update.createdAt}\u0000${update.text}`, update);
+  });
+  return [...unique.values()];
+}
+
 reports.forEach((report) => {
   const saved = Array.isArray(storedUpdates[report.id]) ? storedUpdates[report.id] : [];
-  report.updates = [...(report.updates || []), ...saved];
+  report.updates = mergeReportUpdates(report.updates || [], saved);
 });
 
 function persistReportUpdates(report) {
@@ -238,6 +251,122 @@ function persistReportUpdates(report) {
   } catch (_error) {
     // The update remains available for the current page session.
   }
+}
+
+function openReportDatabase() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("Browser database is unavailable."));
+      return;
+    }
+
+    const request = indexedDB.open(reportDatabaseName, 1);
+    request.onupgradeneeded = () => {
+      const database = request.result;
+      if (!database.objectStoreNames.contains(reportStoreName)) {
+        database.createObjectStore(reportStoreName, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not open the browser database."));
+  });
+}
+
+function reportStorageRecord(report) {
+  const { marker, photoUrl, ...record } = report;
+  return {
+    ...record,
+    photoBlob: report.photoBlob instanceof Blob ? report.photoBlob : null,
+    date: formatReportDate(report.createdAt),
+  };
+}
+
+function readFallbackReports() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(reportFallbackStorageKey) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function readReportsFromDevice() {
+  try {
+    const database = await openReportDatabase();
+    const saved = await new Promise((resolve, reject) => {
+      const transaction = database.transaction(reportStoreName, "readonly");
+      const request = transaction.objectStore(reportStoreName).getAll();
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error || new Error("Could not read saved reports."));
+    });
+    database.close();
+    return saved;
+  } catch (_error) {
+    return [];
+  }
+}
+
+async function saveReportToDevice(report) {
+  const record = reportStorageRecord(report);
+  try {
+    const database = await openReportDatabase();
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(reportStoreName, "readwrite");
+      transaction.objectStore(reportStoreName).put(record);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || new Error("Could not save the report."));
+      transaction.onabort = () => reject(transaction.error || new Error("The report save was cancelled."));
+    });
+    database.close();
+    return { saved: true, photoSaved: true, storage: "browser database" };
+  } catch (_error) {
+    try {
+      const saved = readFallbackReports().filter((item) => Number(item.id) !== Number(record.id));
+      saved.push({ ...record, photoBlob: null });
+      localStorage.setItem(reportFallbackStorageKey, JSON.stringify(saved));
+      return { saved: true, photoSaved: !record.photoBlob, storage: "browser storage" };
+    } catch (_fallbackError) {
+      return { saved: false, photoSaved: false, storage: "page session" };
+    }
+  }
+}
+
+async function restoreSavedReports() {
+  const databaseReports = await readReportsFromDevice();
+  const savedById = new Map();
+  readFallbackReports().forEach((record) => savedById.set(Number(record.id), record));
+  databaseReports.forEach((record) => savedById.set(Number(record.id), record));
+
+  savedById.forEach((record, id) => {
+    const lat = Number(record.lat);
+    const lng = Number(record.lng);
+    const createdAt = new Date(record.createdAt);
+    if (
+      reports.some((report) => report.id === id) ||
+      !Number.isInteger(id) ||
+      !isInsideCatchment(lat, lng) ||
+      Number.isNaN(createdAt.getTime())
+    ) {
+      return;
+    }
+
+    const photoBlob = record.photoBlob instanceof Blob ? record.photoBlob : null;
+    const savedUpdates = Array.isArray(storedUpdates[id]) ? storedUpdates[id] : [];
+    reports.push({
+      ...record,
+      id,
+      lat,
+      lng,
+      createdAt: createdAt.toISOString(),
+      date: formatReportDate(createdAt),
+      isNew: true,
+      photoBlob,
+      photoUrl: photoBlob ? URL.createObjectURL(photoBlob) : null,
+      updates: mergeReportUpdates(record.updates || [], savedUpdates),
+    });
+  });
+
+  applyPeriodFilter();
 }
 
 const map = L.map("map", {
@@ -303,10 +432,10 @@ function severityClass(severity) {
   return "moderate";
 }
 
-const markerIcon = (number, severity) =>
+const markerIcon = (severity) =>
   L.divIcon({
     className: "incident-marker",
-    html: `<div class="incident-pin severity-${severityClass(severity)}"><span>${number}</span></div>`,
+    html: `<div class="incident-pin severity-${severityClass(severity)}"><span aria-hidden="true"></span></div>`,
     iconSize: [42, 48],
     iconAnchor: [21, 45],
   });
@@ -363,9 +492,9 @@ function drawHotspots(visible = true, visibleReports = reports) {
 
 function addMarker(report) {
   const marker = L.marker([report.lat, report.lng], {
-    icon: markerIcon(report.id, report.severity),
+    icon: markerIcon(report.severity),
     keyboard: true,
-    title: `${report.id}. ${report.title}`,
+    title: report.title,
   });
   marker.on("click", () => selectReport(report.id, true));
   markerLayer.addLayer(marker);
@@ -455,9 +584,10 @@ const ui = {
 
 let selectedReportId = 2;
 let currentView = "hotspots";
-let currentPeriod = ui.periodSelect.value || "1y";
+let currentPeriod = ui.periodSelect.value || "7d";
 let toastTimer;
 let pendingPhotoUrl = null;
+let pendingPhotoFile = null;
 let locationRequestId = 0;
 let reportLocationRequestId = 0;
 let pinnedReportLocation = null;
@@ -838,7 +968,6 @@ function selectReport(id, pan = false) {
   const rainfall = rainfallDisplay(report.rainfall);
   ui.areaTitle.textContent = "Around this location";
   ui.areaName.textContent = report.location;
-  ui.reportNumber.querySelector("span").textContent = report.id;
   ui.reportNumber.classList.remove("severity-low", "severity-moderate", "severity-high");
   ui.reportNumber.classList.add(`severity-${severityClass(report.severity)}`);
   ui.severity.textContent = report.severity;
@@ -917,14 +1046,18 @@ function reportsForCurrentPeriod() {
   const end = new Date();
   return reports.filter((report) => {
     const createdAt = new Date(report.createdAt || report.date);
-    return createdAt >= start && createdAt <= end;
+    const createdInPeriod = createdAt >= start && createdAt <= end;
+    const updatedInPeriod = (report.updates || []).some((update) => {
+      const updatedAt = new Date(update.createdAt);
+      return updatedAt >= start && updatedAt <= end;
+    });
+    return createdInPeriod || updatedInPeriod;
   });
 }
 
 function showNoReportsState() {
   ui.areaTitle.textContent = "No reports in this period";
   ui.areaName.textContent = periodLabels[currentPeriod];
-  ui.reportNumber.querySelector("span").textContent = "—";
   ui.reportNumber.classList.remove("severity-low", "severity-moderate", "severity-high");
   ui.reportNumber.classList.add("severity-moderate");
   ui.severity.textContent = "No matching observations";
@@ -965,7 +1098,9 @@ function applyPeriodFilter() {
     showNoReportsState();
   }
 
-  const noun = currentView === "hotspots" ? "hotspots" : "reports";
+  const noun = currentView === "hotspots"
+    ? visibleReports.length === 1 ? "hotspot" : "hotspots"
+    : visibleReports.length === 1 ? "report" : "reports";
   ui.summary.textContent = `${visibleReports.length} ${noun} shown · ${periodLabels[currentPeriod]}`;
 }
 
@@ -1127,6 +1262,7 @@ document.addEventListener("click", (event) => {
 function clearPendingPhoto({ revoke = true, clearInput = true } = {}) {
   if (pendingPhotoUrl && revoke) URL.revokeObjectURL(pendingPhotoUrl);
   pendingPhotoUrl = null;
+  pendingPhotoFile = null;
   if (clearInput) ui.photoInput.value = "";
   ui.photoPreview.hidden = true;
   ui.photoPreviewImage.removeAttribute("src");
@@ -1154,6 +1290,7 @@ ui.photoInput.addEventListener("change", () => {
   }
 
   pendingPhotoUrl = URL.createObjectURL(file);
+  pendingPhotoFile = file;
   ui.photoPreviewImage.src = pendingPhotoUrl;
   ui.photoPreview.hidden = false;
 });
@@ -1473,6 +1610,7 @@ function createReport({
   lat,
   lng,
   photoUrl = null,
+  photoBlob = null,
   rainfall = { available: false },
 }) {
   const reportLat = Number(lat);
@@ -1494,6 +1632,7 @@ function createReport({
     notes,
     isNew: true,
     photoUrl,
+    photoBlob,
     updates: [],
   };
 
@@ -1532,7 +1671,9 @@ ui.form.addEventListener("submit", async (event) => {
   ui.rainfallFormHelp.textContent = "Connecting to the weather service. Your report will still be added if it is unavailable.";
   const rainfall = await fetchRainfallSnapshot(lat, lng);
   const photoUrl = pendingPhotoUrl;
+  const photoBlob = pendingPhotoFile;
   pendingPhotoUrl = null;
+  pendingPhotoFile = null;
   const report = createReport({
     type: ui.observationType.value,
     severity: ui.observationSeverity.value,
@@ -1542,14 +1683,23 @@ ui.form.addEventListener("submit", async (event) => {
     lat,
     lng,
     photoUrl,
+    photoBlob,
     rainfall,
   });
+
+  const persistence = await saveReportToDevice(report);
 
   ui.photoInput.value = "";
   ui.photoPreview.hidden = true;
   ui.photoPreviewImage.removeAttribute("src");
   ui.dialog.close("submitted");
-  showToast(`Observation ${report.id} added at the exact map pin.`);
+  if (!persistence.saved) {
+    showToast("Observation added for this page only because browser storage is unavailable.");
+  } else if (photoBlob && !persistence.photoSaved) {
+    showToast("Observation saved on this device, but the photo could not be stored.");
+  } else {
+    showToast("Observation added and saved on this device.");
+  }
   window.setTimeout(showSurveyIfEligible, 450);
 });
 
@@ -1616,7 +1766,7 @@ document.querySelector("#cancel-update").addEventListener("click", () => {
 enableBackdropClose(ui.updateDialog, () => {
   if (ui.updateDialog.open) ui.updateDialog.close("cancel");
 });
-ui.updateForm.addEventListener("submit", (event) => {
+ui.updateForm.addEventListener("submit", async (event) => {
   if (event.submitter?.id !== "submit-update") return;
   event.preventDefault();
   if (!ui.updateForm.reportValidity()) return;
@@ -1628,6 +1778,8 @@ ui.updateForm.addEventListener("submit", (event) => {
     persisted: true,
   });
   persistReportUpdates(report);
+  await saveReportToDevice(report);
+  applyPeriodFilter();
   renderUpdates(report);
   ui.updateDialog.close("submitted");
   showToast(`Update added to report ${report.id}.`);
@@ -1663,6 +1815,7 @@ ui.surveyForm.addEventListener("submit", (event) => {
 
 selectReport(2, false);
 applyPeriodFilter();
+void restoreSavedReports();
 
 function registerWebMcpTools() {
   const context = document.modelContext;
@@ -1761,8 +1914,13 @@ function registerWebMcpTools() {
         lng: input.longitude,
         rainfall,
       });
-      showToast(`Observation ${report.id} added to the map.`);
-      return { reportId: report.id, status: "added", location: report.location };
+      const persistence = await saveReportToDevice(report);
+      showToast(persistence.saved ? "Observation added and saved on this device." : "Observation added for this page only.");
+      return {
+        reportId: report.id,
+        status: persistence.saved ? "added and saved on this device" : "added for this page only",
+        location: report.location,
+      };
     },
   });
 
@@ -1780,7 +1938,7 @@ function registerWebMcpTools() {
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, untrustedContentHint: true },
-    execute(input) {
+    async execute(input) {
       const report = reports.find((item) => item.id === Number(input?.reportId));
       const text = String(input?.update || "").trim();
       if (!report || text.length < 3 || text.length > 300) {
@@ -1788,6 +1946,8 @@ function registerWebMcpTools() {
       }
       report.updates.push({ text, createdAt: new Date().toISOString(), persisted: true });
       persistReportUpdates(report);
+      await saveReportToDevice(report);
+      applyPeriodFilter();
       if (report.id === selectedReportId) renderUpdates(report);
       return { reportId: report.id, status: "updated", updateCount: report.updates.length };
     },

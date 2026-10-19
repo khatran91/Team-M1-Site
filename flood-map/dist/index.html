@@ -30,7 +30,7 @@
       rel="stylesheet"
       href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
     />
-    <link rel="stylesheet" href="./style.css?v=20261019-wsud2" />
+    <link rel="stylesheet" href="./style.css?v=20261020-persist1" />
   </head>
   <body>
     <header class="site-header">
@@ -80,10 +80,10 @@
             <span class="sr-only">Choose time period</span>
             <select id="period-select">
               <option value="today"> Today</option>
-              <option value="7d">Past 7 days</option>
+              <option value="7d" selected>Past 7 days</option>
               <option value="30d">Past 30 days</option>
               <option value="6m">Past 6 months</option>
-              <option value="1y" selected>Past 1 year</option>
+              <option value="1y">Past 1 year</option>
             </select>
           </label>
         </div>
@@ -140,7 +140,7 @@
 
         <div class="map-summary" aria-live="polite">
           <span class="status-dot"></span>
-          <span id="map-summary-text">3 reports shown · Past 1 year</span>
+          <span id="map-summary-text">1 hotspot shown · Past 7 days</span>
         </div>
       </section>
 
@@ -175,7 +175,7 @@
 
         <article class="report-card" id="report-card" aria-live="polite">
           <div class="report-heading">
-            <div class="pin-badge" id="report-number"><span>2</span></div>
+            <div class="pin-badge" id="report-number" aria-hidden="true"><span></span></div>
             <div>
               <p class="report-kicker" id="report-severity">Moderate impact</p>
               <h2 id="report-title">Water pooling</h2>
@@ -434,7 +434,7 @@
           </div>
         </div>
         <p class="form-help" id="rainfall-form-help">Today’s rainfall and a 30-day comparison will be attached automatically when available.</p>
-        <p class="form-help">Prototype reports and photos stay on this device until the page is refreshed.</p>
+        <p class="form-help">Reports and photos are saved in this browser on this device. They are not shared with other visitors.</p>
         <div class="dialog-actions">
           <button type="button" class="secondary-button" id="cancel-report">Cancel</button>
           <button type="submit" class="primary-button compact" id="submit-report">Add to map</button>
@@ -504,6 +504,6 @@
       crossorigin=""
     ></script>
     <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-    <script src="./app.js?v=20261019-wsud2"></script>
+    <script src="./app.js?v=20261020-persist1"></script>
   </body>
 </html>
